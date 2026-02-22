@@ -1,0 +1,36 @@
+{
+  "name": "conflux-workspace",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Conflux monorepo — conflux-sdk · conflux-contracts · conflux-cas",
+  "packageManager": "pnpm@10.11.0",
+  "scripts": {
+    "build":           "pnpm --filter @cfxdevkit/sdk build && pnpm --filter @conflux-cas/shared build",
+    "build:all":       "pnpm -r build",
+    "test":            "pnpm -r test",
+    "lint":            "biome lint --reporter=summary conflux-sdk/src conflux-cas/backend/src conflux-cas/worker/src conflux-cas/shared/src conflux-cas/frontend/src",
+    "lint:fix":        "biome check --write conflux-sdk/src conflux-cas/backend/src conflux-cas/worker/src conflux-cas/shared/src conflux-cas/frontend/src",
+    "lint:unsafe":     "biome check --write --unsafe conflux-sdk/src conflux-cas/backend/src conflux-cas/worker/src conflux-cas/shared/src conflux-cas/frontend/src",
+    "format":          "biome format --write conflux-sdk/src conflux-cas/backend/src conflux-cas/worker/src conflux-cas/shared/src conflux-cas/frontend/src",
+    "check":           "biome check --reporter=summary conflux-sdk/src conflux-cas/backend/src conflux-cas/worker/src conflux-cas/shared/src conflux-cas/frontend/src",
+    "contracts:compile":          "pnpm --filter @cfxdevkit/contracts compile",
+    "contracts:generate":         "pnpm --filter @cfxdevkit/contracts wagmi:generate",
+    "contracts:codegen":          "pnpm --filter @cfxdevkit/contracts compile:generate",
+    "contracts:test":             "pnpm --filter @cfxdevkit/contracts test",
+    "contracts:deploy":           "pnpm --filter @cfxdevkit/contracts deploy",
+    "contracts:deploy:mainnet":   "pnpm --filter @cfxdevkit/contracts deploy:mainnet"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "bufferutil",
+      "esbuild",
+      "keccak",
+      "secp256k1",
+      "utf-8-validate"
+    ]
+  }
+}
