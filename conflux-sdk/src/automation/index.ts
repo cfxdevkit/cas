@@ -18,6 +18,13 @@ export {
   automationManagerBytecode,
   swappiPriceAdapterBytecode,
   permitHandlerBytecode,
+  // Deployed addresses + wagmi-style contract configs (keyed by chain ID)
+  automationManagerAddress,
+  automationManagerConfig,
+  swappiPriceAdapterAddress,
+  swappiPriceAdapterConfig,
+  permitHandlerAddress,
+  permitHandlerConfig,
 } from './abi.js';
 export type { KeeperClient } from './keeper-interface.js';
 export type { AutomationLogger } from './logger.js';

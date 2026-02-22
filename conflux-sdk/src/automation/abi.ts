@@ -21,3 +21,14 @@ export {
   swappiPriceAdapterBytecode,
   permitHandlerBytecode,
 } from './generated.js';
+
+// ─── Deployed addresses (baked in at codegen time from deployments.json) ──────
+// automationManagerAddress = { 1030: '0x...', 71?: '0x...' } as const
+export {
+  automationManagerAddress,
+  automationManagerConfig,
+  swappiPriceAdapterAddress,
+  swappiPriceAdapterConfig,
+  permitHandlerAddress,
+  permitHandlerConfig,
+} from './generated.js';

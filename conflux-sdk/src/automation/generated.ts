@@ -2,6 +2,9 @@
 // AutomationManager
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
+ */
 export const automationManagerAbi = [
   {
     type: 'constructor',
@@ -594,10 +597,28 @@ export const automationManagerAbi = [
   },
 ] as const
 
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
+ */
+export const automationManagerAddress = {
+  1030: '0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F',
+} as const
+
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
+ */
+export const automationManagerConfig = {
+  address: automationManagerAddress,
+  abi: automationManagerAbi,
+} as const
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PermitHandler
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
+ */
 export const permitHandlerAbi = [
   {
     type: 'error',
@@ -682,10 +703,28 @@ export const permitHandlerAbi = [
   },
 ] as const
 
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
+ */
+export const permitHandlerAddress = {
+  1030: '0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B',
+} as const
+
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
+ */
+export const permitHandlerConfig = {
+  address: permitHandlerAddress,
+  abi: permitHandlerAbi,
+} as const
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SwappiPriceAdapter
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
+ */
 export const swappiPriceAdapterAbi = [
   {
     type: 'constructor',
@@ -844,6 +883,21 @@ export const swappiPriceAdapterAbi = [
     stateMutability: 'nonpayable',
   },
 ] as const
+
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
+ */
+export const swappiPriceAdapterAddress = {
+  1030: '0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9',
+} as const
+
+/**
+ * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
+ */
+export const swappiPriceAdapterConfig = {
+  address: swappiPriceAdapterAddress,
+  abi: swappiPriceAdapterAbi,
+} as const
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // hardhat-bytecode

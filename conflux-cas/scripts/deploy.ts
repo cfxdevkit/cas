@@ -31,6 +31,7 @@ import {
   permitHandlerBytecode,
 } from '@cfxdevkit/sdk/automation';
 import * as dotenv from 'dotenv';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // ─── Load env ────────────────────────────────────────────────────────────────
@@ -165,9 +166,22 @@ async function main() {
     ),
   );
 
+  // ─── Write deployments.json ───────────────────────────────────────────────
+  const deploymentsPath = resolve(import.meta.dirname, '../../conflux-contracts/deployments.json');
+  let registry: Record<string, Record<string, string>> = {};
+  try { registry = JSON.parse(readFileSync(deploymentsPath, 'utf-8')); } catch { /* new file */ }
+  registry[String(viemChain.id)] = {
+    AutomationManager: automationManagerAddress,
+    SwappiPriceAdapter: priceAdapterAddress,
+    PermitHandler: permitHandlerAddress,
+  };
+  writeFileSync(deploymentsPath, JSON.stringify(registry, null, 2) + '\n');
+  console.log(`\n✔  Updated conflux-contracts/deployments.json (chain ${viemChain.id})`);
+  console.log('   Run `pnpm contracts:generate` to bake addresses into the SDK.');
+
   // ─── .env snippet ─────────────────────────────────────────────────────────
   const isMainnet = networkKey === 'mainnet';
-  console.log('\n=== Add to your .env ===');
+  console.log('\n=== Add to conflux-cas/.env ===');
   console.log(`AUTOMATION_MANAGER_ADDRESS=${automationManagerAddress}`);
   console.log(`PRICE_ADAPTER_ADDRESS=${priceAdapterAddress}`);
   console.log(`PERMIT_HANDLER_ADDRESS=${permitHandlerAddress}`);

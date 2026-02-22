@@ -1,0 +1,20 @@
+{
+  "name": "conflux-triage",
+  "version": "1.0.0",
+  "description": "On-chain triage CLI for Conflux CAS limit-order and DCA jobs",
+  "type": "module",
+  "bin": {
+    "triage": "./src/index.mjs"
+  },
+  "scripts": {
+    "triage":             "node src/index.mjs",
+    "triage:lo":          "node src/triage-lo.mjs",
+    "triage:dca":         "node src/triage-dca.mjs",
+    "triage:jnf":         "node src/triage-job-not-found.mjs",
+    "check:deployment":   "node src/check-deployment.mjs",
+    "recover":            "node src/recover.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.20.0"
+  }
+}
