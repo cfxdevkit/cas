@@ -17,8 +17,10 @@
     "contracts:generate":         "pnpm --filter @cfxdevkit/contracts wagmi:generate",
     "contracts:codegen":          "pnpm --filter @cfxdevkit/contracts compile:generate",
     "contracts:test":             "pnpm --filter @cfxdevkit/contracts test",
-    "contracts:deploy":           "pnpm --filter @cfxdevkit/contracts deploy",
-    "contracts:deploy:mainnet":   "pnpm --filter @cfxdevkit/contracts deploy:mainnet"
+    "contracts:deploy":           "pnpm --filter conflux-cas deploy:contracts",
+    "contracts:deploy:mainnet":   "pnpm --filter conflux-cas deploy:contracts:mainnet",
+    "contracts:deploy:hardhat":   "pnpm --filter @cfxdevkit/contracts deploy",
+    "contracts:deploy:hardhat:mainnet": "pnpm --filter @cfxdevkit/contracts deploy:mainnet"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0"

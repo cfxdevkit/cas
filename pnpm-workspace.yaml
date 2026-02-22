@@ -1,6 +1,7 @@
 packages:
   - conflux-sdk
   - conflux-contracts
+  - conflux-cas
   - conflux-cas/shared
   - conflux-cas/backend
   - conflux-cas/worker

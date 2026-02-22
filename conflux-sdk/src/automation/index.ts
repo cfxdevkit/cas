@@ -14,6 +14,10 @@ export {
   automationManagerAbi,
   swappiPriceAdapterAbi,
   permitHandlerAbi,
+  // Deployment bytecode (for programmatic deploy via viem deployContract)
+  automationManagerBytecode,
+  swappiPriceAdapterBytecode,
+  permitHandlerBytecode,
 } from './abi.js';
 export type { KeeperClient } from './keeper-interface.js';
 export type { AutomationLogger } from './logger.js';

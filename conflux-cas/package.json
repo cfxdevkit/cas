@@ -4,49 +4,30 @@
   "description": "Conflux Automation Site – non-custodial limit order & DCA automation on Conflux eSpace",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "shared",
-    "contracts",
-    "worker",
-    "backend",
-    "frontend"
-  ],
   "scripts": {
-    "build": "pnpm -r build",
+    "build": "pnpm --filter '@conflux-cas/*' build",
     "dev": "concurrently -k -n backend,frontend,worker -c cyan,magenta,green \"pnpm --filter @conflux-cas/backend dev\" \"pnpm --filter @conflux-cas/frontend dev:https\" \"pnpm --filter @conflux-cas/worker dev\"",
-    "test": "pnpm -r test",
-    "type-check": "pnpm -r type-check",
+    "test": "pnpm --filter '@conflux-cas/*' test",
+    "type-check": "pnpm --filter '@conflux-cas/*' type-check",
     "lint": "biome lint --write .",
     "dev:backend": "pnpm --filter @conflux-cas/backend dev",
     "dev:worker": "pnpm --filter @conflux-cas/worker dev",
     "dev:frontend": "pnpm --filter @conflux-cas/frontend dev",
-    "contracts:compile": "pnpm --filter @conflux-cas/contracts compile",
-    "contracts:test": "pnpm --filter @conflux-cas/contracts test",
-    "contracts:deploy": "pnpm --filter @conflux-cas/contracts run deploy",
-    "contracts:deploy:mainnet": "pnpm --filter @conflux-cas/contracts run deploy:mainnet",
-    "contracts:deploy:local": "pnpm --filter @conflux-cas/contracts run deploy:local",
-    "contracts:verify": "pnpm --filter @conflux-cas/contracts run verify",
-    "contracts:verify:mainnet": "pnpm --filter @conflux-cas/contracts run verify:mainnet",
-    "contracts:check-wallet": "pnpm --filter @conflux-cas/contracts run check-wallet",
-    "gen-key": "node scripts/gen-key.mjs"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "bufferutil",
-      "esbuild",
-      "keccak",
-      "secp256k1",
-      "utf-8-validate"
-    ]
+    "gen-key": "node scripts/gen-key.mjs",
+    "deploy:contracts": "tsx --tsconfig tsconfig.scripts.json scripts/deploy.ts",
+    "deploy:contracts:mainnet": "NETWORK=mainnet tsx --tsconfig tsconfig.scripts.json scripts/deploy.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.10",
+    "@cfxdevkit/sdk": "workspace:*",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
     "@types/node": "^25.0.3",
     "concurrently": "^8.2.2",
-    "typescript": "^5.9.3"
+    "dotenv": "^17.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "viem": "^2.43.3"
   },
   "packageManager": "pnpm@10.11.0",
   "engines": {
