@@ -19,15 +19,17 @@ function StrategyModal({
   open: boolean;
   onClose: () => void;
 }) {
-  // Close on Escape
+  const [txInProgress, setTxInProgress] = useState(false);
+
+  // Close on Escape — blocked while transactions are running
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !txInProgress) onClose();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+  }, [open, onClose, txInProgress]);
 
   if (!open) return null;
 
@@ -38,10 +40,10 @@ function StrategyModal({
       role="dialog"
       aria-label="Create strategy"
     >
-      {/* Backdrop */}
+      {/* Backdrop — not clickable while tx is running */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
+        className={`absolute inset-0 bg-black/60 backdrop-blur-sm ${txInProgress ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        onClick={txInProgress ? undefined : onClose}
       />
 
       {/* Slide-over panel */}
@@ -53,8 +55,10 @@ function StrategyModal({
           </h2>
           <button
             type="button"
-            onClick={onClose}
-            className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800"
+            onClick={txInProgress ? undefined : onClose}
+            disabled={txInProgress}
+            title={txInProgress ? 'Complete or cancel transactions first' : 'Close'}
+            className={`p-1 rounded-lg transition-colors ${txInProgress ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             aria-label="Close"
           >
             <svg
@@ -74,7 +78,7 @@ function StrategyModal({
 
         {/* Body */}
         <div className="flex-1 px-6 py-6">
-          <StrategyBuilder onSuccess={onClose} />
+          <StrategyBuilder onSuccess={onClose} onSubmittingChange={setTxInProgress} />
         </div>
       </div>
     </div>

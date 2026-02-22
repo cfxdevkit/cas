@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type Address, formatUnits, parseEventLogs, parseUnits } from 'viem';
-import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
+import { useAccount, useChainId, usePublicClient, useWriteContract } from 'wagmi';
 import {
   CFX_NATIVE_ADDRESS,
   getPairedTokens,
@@ -23,6 +23,17 @@ import {
 
 type StrategyKind = 'limit_order' | 'dca';
 
+// ── Tx stepper types ──────────────────────────────────────────────────────────
+type TxStepId = 'wrap' | 'approve' | 'onchain' | 'save';
+type TxStepStatus = 'idle' | 'active' | 'waiting' | 'done' | 'skipped' | 'error';
+interface TxStepDef {
+  id: TxStepId;
+  label: string;
+  detail: string;
+  status: TxStepStatus;
+  txHash?: `0x${string}`;
+}
+
 function _toWeiString(humanValue: string, decimals = 18): string {
   const trimmed = humanValue.trim();
   if (!trimmed || trimmed === '0') return '0';
@@ -39,10 +50,13 @@ function fmtBalance(b: string): string {
 
 export function StrategyBuilder({
   onSuccess,
+  onSubmittingChange,
 }: {
   onSuccess?: () => void;
+  onSubmittingChange?: (v: boolean) => void;
 } = {}) {
   const { address } = useAccount();
+  const chainId = useChainId();
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
   const { token } = useAuthContext();
@@ -64,7 +78,7 @@ export function StrategyBuilder({
 
   const [kind, setKind] = useState<StrategyKind>('limit_order');
   const [submitting, setSubmitting] = useState(false);
-  const [txStep, setTxStep] = useState<string | null>(null);
+  const [txSteps, setTxSteps] = useState<TxStepDef[] | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [unlimitedApproval, setUnlimitedApproval] = useState(false);
@@ -77,6 +91,20 @@ export function StrategyBuilder({
   const [wrapping, setWrapping] = useState(false);
   const [wrapError, setWrapError] = useState<string | null>(null);
   const [wrapSuccess, setWrapSuccess] = useState<string | null>(null);
+
+  // Notify parent (e.g. StrategyModal) when the stepper overlay becomes visible
+  // so it can block the close button until all transactions complete.
+  useEffect(() => { onSubmittingChange?.(txSteps !== null); }, [onSubmittingChange, txSteps]);
+
+  // Update a single step's status and detail atomically
+  const setStep = useCallback(
+    (id: TxStepId, status: TxStepStatus, detail: string, txHash?: `0x${string}`) => {
+      setTxSteps(prev =>
+        prev?.map(s => s.id === id ? { ...s, status, detail, ...(txHash ? { txHash } : {}) } : s) ?? prev
+      );
+    },
+    [],
+  );
 
   // Shared fields
   const [tokenIn, setTokenIn] = useState('');
@@ -432,6 +460,8 @@ export function StrategyBuilder({
       return;
     }
 
+    let activeStepId: TxStepId = 'wrap'; // tracks current step for error attribution
+
     try {
       let body: object;
       // Resolve CFX (native) → WCFX address before sending to the backend
@@ -474,9 +504,20 @@ export function StrategyBuilder({
       const tokenInIsNative =
         tokenIn.toLowerCase() === CFX_NATIVE_ADDRESS.toLowerCase();
 
+      // ── Initialise step tracker ────────────────────────────────────────────────────────────
+      const tokenSym = tokenInIsNative ? 'wCFX' : (tokenInInfo?.symbol ?? 'token');
+      setTxSteps([
+        { id: 'wrap',    label: 'Wrap CFX → wCFX',      detail: 'Pending…', status: tokenInIsNative ? 'idle' : 'skipped' },
+        { id: 'approve', label: `Approve ${tokenSym}`,  detail: 'Pending…', status: 'idle' },
+        { id: 'onchain', label: kind === 'dca' ? 'Register DCA job' : 'Register limit order', detail: 'Pending…', status: 'idle' },
+        { id: 'save',    label: 'Save strategy',         detail: 'Pending…', status: 'idle' },
+      ]);
+      activeStepId = tokenInIsNative ? 'wrap' : 'approve';
+
       // ── 0. Auto-wrap CFX → wCFX if WCFX balance is insufficient ──────────
       if (tokenInIsNative && requiredAllowance > 0n) {
-        setTxStep('Checking wCFX balance…');
+        activeStepId = 'wrap';
+        setStep('wrap', 'active', 'Checking wCFX balance…');
         const wcfxBal = (await publicClient.readContract({
           address: wcfxAddr,
           abi: WCFX_ABI,
@@ -485,9 +526,8 @@ export function StrategyBuilder({
         })) as bigint;
         if (wcfxBal < requiredAllowance) {
           const shortfall = requiredAllowance - wcfxBal;
-          setTxStep(
-            `Wrapping ${parseFloat(formatUnits(shortfall, 18)).toFixed(6)} CFX → wCFX (wallet prompt)…`
-          );
+          const shortfallFmt = parseFloat(formatUnits(shortfall, 18)).toFixed(6);
+          setStep('wrap', 'active', `Wrapping ${shortfallFmt} CFX → wCFX…`);
           const wrapGas = await publicClient.estimateContractGas({
             address: wcfxAddr,
             abi: WCFX_ABI,
@@ -504,18 +544,22 @@ export function StrategyBuilder({
             maxFeePerGas,
             maxPriorityFeePerGas,
           });
-          setTxStep('Waiting for wrap confirmation…');
+          setStep('wrap', 'waiting', 'Waiting for wrap confirmation…', wrapHash);
           await publicClient.waitForTransactionReceipt({
             hash: wrapHash,
             pollingInterval: 2_000,
             timeout: 120_000,
           });
+          setStep('wrap', 'done', `Wrapped ${shortfallFmt} CFX ✓`, wrapHash);
+        } else {
+          setStep('wrap', 'skipped', 'Sufficient wCFX balance');
         }
       }
 
       // ── 1. ERC-20 approval (resolvedTokenIn is always ERC-20 — WCFX for native CFX) ──
+      activeStepId = 'approve';
       if (requiredAllowance > 0n) {
-        setTxStep('Checking token allowance…');
+        setStep('approve', 'active', 'Checking token allowance…');
         const currentAllowance = (await publicClient.readContract({
           address: resolvedTokenIn as `0x${string}`,
           abi: ERC20_ABI,
@@ -535,7 +579,7 @@ export function StrategyBuilder({
             : kind === 'dca'
               ? `${totalFormatted} ${sym} (${amountPerSwap} × ${totalSwaps} orders)`
               : `${totalFormatted} ${sym}`;
-          setTxStep(`Approve ${approveLabel} (wallet prompt)…`);
+          setStep('approve', 'active', `Approve ${approveLabel}…`);
           const approveGas = await publicClient.estimateContractGas({
             address: resolvedTokenIn as `0x${string}`,
             abi: ERC20_ABI,
@@ -552,13 +596,18 @@ export function StrategyBuilder({
             maxFeePerGas,
             maxPriorityFeePerGas,
           });
-          setTxStep('Waiting for approval confirmation…');
+          setStep('approve', 'waiting', 'Waiting for approval confirmation…', approveTxHash);
           await publicClient.waitForTransactionReceipt({
             hash: approveTxHash,
             pollingInterval: 2_000,
             timeout: 120_000,
           });
+          setStep('approve', 'done', `Approved ${approveLabel} ✓`, approveTxHash);
+        } else {
+          setStep('approve', 'skipped', 'Allowance already sufficient');
         }
+      } else {
+        setStep('approve', 'skipped', 'No approval needed');
       }
 
       // ── 2. Register job on-chain ──────────────────────────────────────────
@@ -571,6 +620,7 @@ export function StrategyBuilder({
       try {
         let txHash: `0x${string}`;
 
+        activeStepId = 'onchain';
         if (kind === 'limit_order') {
           const targetPriceWei = parseUnits(targetPrice.trim() || '0', 18);
           const expectedOut =
@@ -580,7 +630,7 @@ export function StrategyBuilder({
           const minAmountOut =
             (expectedOut * BigInt(10000 - slippageBps)) / 10000n;
 
-          setTxStep('Register limit order on-chain (wallet prompt)…');
+          setStep('onchain', 'active', 'Register limit order (confirm in wallet)…');
           const loArgs = [
             {
               tokenIn: resolvedTokenIn as `0x${string}`,
@@ -610,7 +660,7 @@ export function StrategyBuilder({
             maxPriorityFeePerGas,
           });
         } else {
-          setTxStep('Register DCA job on-chain (wallet prompt)…');
+          setStep('onchain', 'active', 'Register DCA job (confirm in wallet)…');
           const dcaArgs = [
             {
               tokenIn: resolvedTokenIn as `0x${string}`,
@@ -643,7 +693,7 @@ export function StrategyBuilder({
         }
 
         // ── 3. Parse JobCreated event to get bytes32 jobId ──────────────────
-        setTxStep(`Waiting for confirmation… (tx ${txHash.slice(0, 10)}…)`);
+        setStep('onchain', 'waiting', `Waiting for confirmation… (tx ${txHash.slice(0, 10)}…)`, txHash);
         const receipt = await publicClient.waitForTransactionReceipt({
           hash: txHash,
           pollingInterval: 2_000, // poll every 2 s (Conflux block time ~2-3 s)
@@ -665,6 +715,11 @@ export function StrategyBuilder({
             receipt.transactionHash
           );
         }
+        setStep(
+          'onchain', 'done',
+          onChainJobId ? `Registered ✓ (job ${onChainJobId.slice(0, 10)}…)` : 'Registered ✓',
+          txHash,
+        );
       } catch (contractErr: unknown) {
         const msg = (contractErr as Error).message ?? String(contractErr);
         // Viem throws "could not be found" when waitForTransactionReceipt times out.
@@ -680,7 +735,8 @@ export function StrategyBuilder({
       }
 
       // ── 4. Build backend body ─────────────────────────────────────────────
-      setTxStep('Saving strategy…');
+      activeStepId = 'save';
+      setStep('save', 'active', 'Saving strategy…');
       if (kind === 'limit_order') {
         const targetPriceWei = parseUnits(targetPrice.trim() || '0', 18);
         // minAmountOut = amountIn * targetPrice/1e18 * (1 - slippage)
@@ -740,24 +796,21 @@ export function StrategyBuilder({
         throw new Error(payload.error ?? `HTTP ${res.status}`);
       }
 
-      setSuccessMsg('Strategy created! It will appear in your dashboard.');
-      setTimeout(() => {
-        setSuccessMsg(null);
-        onSuccess?.();
-      }, 2_000);
-      // Refresh balances so the panel reflects the post-approval state
+      setStep('save', 'done', 'Strategy saved ✓');
+      // Refresh balances + reset form (hidden under stepper, ready for next use)
       refresh();
-      // Reset form fields for a new strategy
       setAmountIn('');
       setAmountPerSwap('');
       setTargetPrice('');
       setExpiryPreset('');
       setError(null);
+      // Stepper shows success state; user clicks “View Strategies” to close
     } catch (err: unknown) {
-      setError((err as Error).message);
+      const msg = (err as Error).message ?? String(err);
+      setError(msg);
+      setStep(activeStepId, 'error', msg.slice(0, 120));
     } finally {
       setSubmitting(false);
-      setTxStep(null);
     }
   }
 
@@ -843,6 +896,18 @@ export function StrategyBuilder({
 
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-[480px] space-y-1">
+      {/* ── Tx stepper overlay (replaces form content during submission) ─────── */}
+      {txSteps !== null && (
+        <TxStepperPanel
+          steps={txSteps}
+          error={error}
+          onRetry={() => { setTxSteps(null); setError(null); }}
+          onDone={() => { setTxSteps(null); onSuccess?.(); }}
+          chainId={chainId}
+        />
+      )}
+      {/* ── Form ─────────────────────────────────────────────────────────────── */}
+      {txSteps === null && (<>
       {/* ── Tab bar ──────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 mb-3">
         {(['limit_order', 'dca'] as StrategyKind[]).map((k) => (
@@ -1575,20 +1640,8 @@ export function StrategyBuilder({
         disabled={submitting || !mounted}
         className="w-full bg-conflux-600 hover:bg-conflux-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-2xl transition-colors text-base mt-2"
       >
-        {!mounted
-          ? 'Loading…'
-          : submitting
-            ? (txStep ?? 'Creating…')
-            : !address
-              ? 'Connect wallet'
-              : 'Create Strategy'}
+        {!mounted ? 'Loading…' : !address ? 'Connect wallet' : 'Create Strategy'}
       </button>
-
-      {submitting && (
-        <p className="text-xs text-slate-400 text-center">
-          The wallet will prompt you for each signature. Keep this tab open.
-        </p>
-      )}
 
       {/* Disclaimer */}
       <div className="flex gap-2 items-start text-xs text-slate-500 px-1 pt-1">
@@ -1599,6 +1652,7 @@ export function StrategyBuilder({
             : 'DCA orders execute at market price on each interval. Execution depends on the keeper being operational.'}
         </p>
       </div>
+      </>)}
     </form>
   );
 }
@@ -1868,6 +1922,164 @@ function SwapArrow({ onClick }: { onClick?: () => void }) {
       >
         ↓
       </button>
+    </div>
+  );
+}
+
+// ── TxStepperPanel ─────────────────────────────────────────────────────────────
+/** Full-panel step tracker rendered inside the slide-over while transactions execute */
+function TxStepperPanel({
+  steps,
+  error,
+  onRetry,
+  onDone,
+  chainId,
+}: {
+  steps: TxStepDef[];
+  error: string | null;
+  onRetry: () => void;
+  onDone: () => void;
+  chainId: number;
+}) {
+  const allDone = steps.every(s => s.status === 'done' || s.status === 'skipped');
+  const hasError = steps.some(s => s.status === 'error');
+  const explorerBase = chainId === 71
+    ? 'https://evmtestnet.confluxscan.org'
+    : 'https://evm.confluxscan.org';
+
+  return (
+    <div className="flex flex-col gap-6 py-2">
+      {/* ── Header ───────────────────────────────────────────────────────── */}
+      <div className="flex flex-col items-center gap-3 text-center">
+        {allDone ? (
+          <div className="w-14 h-14 rounded-full bg-green-900/60 border border-green-600 flex items-center justify-center">
+            <svg className="w-7 h-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+        ) : hasError ? (
+          <div className="w-14 h-14 rounded-full bg-red-900/60 border border-red-600 flex items-center justify-center">
+            <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+        ) : (
+          <div className="w-14 h-14 rounded-full border-4 border-conflux-500/30 border-t-conflux-500 animate-spin" />
+        )}
+        <div>
+          <h3 className="text-lg font-semibold text-white">
+            {allDone ? 'Strategy Created!' : hasError ? 'Something went wrong' : 'Creating Strategy…'}
+          </h3>
+          <p className="text-sm text-slate-400 mt-0.5">
+            {allDone
+              ? 'Your strategy is live and will be monitored by the keeper.'
+              : hasError
+              ? 'One of the steps failed. You can try again from the form.'
+              : 'Keep this tab open while transactions are processed.'}
+          </p>
+        </div>
+      </div>
+
+      {/* ── Step list ────────────────────────────────────────────────────── */}
+      <div className="space-y-2">
+        {steps.map((step, i) => (
+          <div
+            key={step.id}
+            className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
+              step.status === 'active' || step.status === 'waiting'
+                ? 'border-conflux-700 bg-conflux-950/40'
+                : step.status === 'done'
+                ? 'border-green-800/50 bg-green-950/20'
+                : step.status === 'error'
+                ? 'border-red-800/60 bg-red-950/20'
+                : 'border-slate-800 bg-slate-900/20 opacity-60'
+            }`}
+          >
+            {/* Status icon */}
+            <div className="mt-0.5 shrink-0 w-6 h-6 flex items-center justify-center">
+              {step.status === 'done' && (
+                <div className="w-6 h-6 rounded-full bg-green-800 border border-green-600 flex items-center justify-center">
+                  <svg className="w-3.5 h-3.5 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              )}
+              {step.status === 'skipped' && (
+                <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+                  <span className="text-slate-500 text-xs font-bold">—</span>
+                </div>
+              )}
+              {(step.status === 'active' || step.status === 'waiting') && (
+                <div className="w-6 h-6 rounded-full border-2 border-conflux-400 border-t-transparent animate-spin" />
+              )}
+              {step.status === 'error' && (
+                <div className="w-6 h-6 rounded-full bg-red-900 border border-red-600 flex items-center justify-center">
+                  <svg className="w-3.5 h-3.5 text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </div>
+              )}
+              {step.status === 'idle' && (
+                <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+                  <span className="text-slate-600 text-xs font-semibold">{i + 1}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-medium leading-tight ${
+                step.status === 'idle' || step.status === 'skipped' ? 'text-slate-500'
+                : step.status === 'done' ? 'text-green-300'
+                : step.status === 'error' ? 'text-red-300'
+                : 'text-white'
+              }`}>
+                {step.label}
+              </p>
+              <p className={`text-xs mt-0.5 ${step.status === 'error' ? 'text-red-400' : 'text-slate-500'}`}>
+                {step.detail}
+              </p>
+              {step.txHash && (
+                <a
+                  href={`${explorerBase}/tx/${step.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-conflux-400 hover:text-conflux-300 transition-colors mt-0.5 inline-block font-mono"
+                >
+                  {step.txHash.slice(0, 10)}…{step.txHash.slice(-6)} ↗
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Action buttons ───────────────────────────────────────────────── */}
+      {allDone && (
+        <button
+          type="button"
+          onClick={onDone}
+          className="w-full bg-conflux-600 hover:bg-conflux-700 text-white font-semibold py-3.5 rounded-2xl transition-colors text-base"
+        >
+          View Strategies
+        </button>
+      )}
+      {hasError && (
+        <div className="space-y-2">
+          {error && (
+            <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300 break-words">
+              {error}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={onRetry}
+            className="w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold py-3 rounded-2xl transition-colors"
+          >
+            ← Try Again
+          </button>
+        </div>
+      )}
     </div>
   );
 }
