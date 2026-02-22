@@ -34,13 +34,15 @@ Solidity on Conflux eSpace (EVM-compatible). Hardhat + OpenZeppelin 5.
 
 ### Deployed Contracts (testnet — chain ID 71)
 
+Deployed 2026-02-22. Canonical source: `conflux-contracts/deployments.json`.
+
 | Contract | Address |
 |---|---|
 | Swappi Router | `0x873789aaF553FD0B4252d0D2b72C6331c47aff2E` |
 | Swappi Factory | `0x36B83E0D41D1dd9C73a006F0c1cbC1F096E69E34` |
-| SwappiPriceAdapter | `0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9` |
-| AutomationManager | `0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F` |
-| PermitHandler | `0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B` |
+| SwappiPriceAdapter | `0x88c48e0e8f76493bb926131a2be779cc17ecbedf` |
+| AutomationManager | `0x33e5e5b262e5d8ebc443e1c6c9f14215b020554d` |
+| PermitHandler | `0x4240882f2d9d70cdb9fbcc859cdd4d3e59f5d137` |
 
 ### Deployed Contracts (mainnet — chain ID 1030)
 

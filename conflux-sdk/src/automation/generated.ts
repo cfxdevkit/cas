@@ -3,7 +3,8 @@
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x33e5e5b262e5d8ebc443e1c6c9f14215b020554d)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
  */
 export const automationManagerAbi = [
   {
@@ -598,14 +599,17 @@ export const automationManagerAbi = [
 ] as const
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x33e5e5b262e5d8ebc443e1c6c9f14215b020554d)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
  */
 export const automationManagerAddress = {
+  71: '0x33e5E5B262e5d8eBC443E1c6c9F14215b020554d',
   1030: '0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F',
 } as const
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x33e5e5b262e5d8ebc443e1c6c9f14215b020554d)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F)
  */
 export const automationManagerConfig = {
   address: automationManagerAddress,
@@ -617,7 +621,8 @@ export const automationManagerConfig = {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x4240882f2d9d70cdb9fbcc859cdd4d3e59f5d137)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
  */
 export const permitHandlerAbi = [
   {
@@ -704,14 +709,17 @@ export const permitHandlerAbi = [
 ] as const
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x4240882f2d9d70cdb9fbcc859cdd4d3e59f5d137)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
  */
 export const permitHandlerAddress = {
+  71: '0x4240882f2D9D70Cdb9fBCC859cdD4d3e59f5d137',
   1030: '0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B',
 } as const
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x4240882f2d9d70cdb9fbcc859cdd4d3e59f5d137)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B)
  */
 export const permitHandlerConfig = {
   address: permitHandlerAddress,
@@ -723,7 +731,8 @@ export const permitHandlerConfig = {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x88c48e0e8f76493bb926131a2be779cc17ecbedf)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
  */
 export const swappiPriceAdapterAbi = [
   {
@@ -885,14 +894,17 @@ export const swappiPriceAdapterAbi = [
 ] as const
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x88c48e0e8f76493bb926131a2be779cc17ecbedf)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
  */
 export const swappiPriceAdapterAddress = {
+  71: '0x88C48e0E8F76493Bb926131a2BE779cc17ecBEdF',
   1030: '0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9',
 } as const
 
 /**
- * [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
+ * - [__View Contract on Conflux E Space Testnet Conflux Scan__](https://evmtestnet.confluxscan.org/address/0x88c48e0e8f76493bb926131a2be779cc17ecbedf)
+ * - [__View Contract on Conflux E Space Conflux Scan__](https://evm.confluxscan.org/address/0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9)
  */
 export const swappiPriceAdapterConfig = {
   address: swappiPriceAdapterAddress,
