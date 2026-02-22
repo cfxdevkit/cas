@@ -1,12 +1,14 @@
-# Build context is the parent "repos" directory so both
-# conflux-cas and conflux-sdk are available during the build.
+# Production compose file — uses pre-built multi-arch images from ghcr.io.
+# Server usage:
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Images are built and pushed from a dev machine with:
+#   conflux-cas/scripts/build-and-push.sh
 
 services:
   backend:
-    build:
-      context: ..
-      dockerfile: conflux-cas/backend/Dockerfile
-    image: conflux-cas/backend:latest
+    image: ghcr.io/cfxdevkit/cas-backend:latest
     env_file: .env
     environment:
       NODE_ENV: production
@@ -25,10 +27,7 @@ services:
       retries: 5
 
   worker:
-    build:
-      context: ..
-      dockerfile: conflux-cas/worker/Dockerfile
-    image: conflux-cas/worker:latest
+    image: ghcr.io/cfxdevkit/cas-worker:latest
     env_file: .env
     environment:
       NODE_ENV: production
@@ -41,13 +40,11 @@ services:
     restart: unless-stopped
 
   frontend:
-    build:
-      context: ..
-      dockerfile: conflux-cas/frontend/Dockerfile
-    image: conflux-cas/frontend:latest
+    image: ghcr.io/cfxdevkit/cas-frontend:latest
     env_file: .env
     environment:
       NODE_ENV: production
+      # BACKEND_URL must be the Docker service name — overrides any .env value
       BACKEND_URL: http://backend:3001
     ports:
       - "3000:3000"

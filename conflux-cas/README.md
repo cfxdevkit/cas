@@ -1,5 +1,7 @@
 # Conflux Automation Site (CAS)
 
+> **Live:** https://cfxdevkit.org
+
 Non-custodial limit order and DCA (dollar-cost averaging) automation on
 **Conflux eSpace** — users sign strategies once with their wallet; a keeper
 network executes trades autonomously without ever holding private keys.
@@ -164,17 +166,29 @@ pnpm run dev:worker
 ## Running Tests
 
 ```bash
-# All packages
-pnpm test
-
 # Individual packages
 pnpm --filter @conflux-cas/backend test   # 16 integration tests
-pnpm --filter @conflux-cas/worker test    # 18 unit tests
-pnpm contracts:test                       # 12 Hardhat tests
+pnpm --filter @conflux-cas/worker test    # 40 unit tests
+pnpm --filter @cfxdevkit/sdk test         # 85 unit tests
+pnpm contracts:test                       # 57 Hardhat tests
+
+# Coverage (requires NODE_PATH for workspace-root coverage provider)
+NODE_PATH=/path/to/repos/node_modules pnpm --filter @conflux-cas/worker test --coverage
+NODE_PATH=/path/to/repos/node_modules pnpm --filter @conflux-cas/backend test --coverage
 
 # Type-check all packages
 pnpm type-check
 ```
+
+### Test Summary
+
+| Package | Tests | Coverage (statements) | Notes |
+|---------|-------|-----------------------|-------|
+| `@conflux-cas/backend` | 16 ✅ | 33% overall · 79% jobs routes · 85% db | Low overall due to `pools.ts`/`system.ts` (external RPC, no mocks) |
+| `@conflux-cas/worker` | 40 ✅ | **94%** | executor + safety-guard fully covered |
+| `@cfxdevkit/sdk` | 85 ✅ | ~80% automation module | High on automation; wallet/keystore features untested |
+| Solidity contracts | 57 ✅ | >90% line coverage | Hardhat + OpenZeppelin; all paths covered |
+| **Total** | **198** | — | All 198 tests pass |
 
 ---
 
@@ -192,7 +206,7 @@ Requires `DEPLOYER_PRIVATE_KEY` in `.env`. Needs ≥ 0.1 CFX (testnet) / ≥ 0.5
 ### Testnet
 
 ```bash
-# .env: NETWORK=testnet  (default)
+# run from monorepo root
 pnpm contracts:deploy
 # Outputs deployed addresses — copy them to .env
 ```
@@ -200,15 +214,16 @@ pnpm contracts:deploy
 ### Mainnet
 
 ```bash
-# .env: NETWORK=mainnet, DEPLOYER_PRIVATE_KEY=<key>
 pnpm contracts:deploy:mainnet
 # Prints a ready-to-paste .env snippet after a successful deploy
 ```
 
-### Compiling only
+### Compile + regenerate SDK types
 
 ```bash
-pnpm contracts:compile
+# Compiles Solidity and regenerates conflux-sdk/src/automation/generated.ts
+# (ABIs, bytecode, per-chain address maps)
+pnpm contracts:codegen
 ```
 
 ---
@@ -229,11 +244,13 @@ pnpm contracts:compile
 
 | Contract | Address |
 |---|---|
-| `AutomationManager` | `0x9D5B131e5bA37A238cd1C485E2D9d7c2A68E1d0F` |
-| `SwappiPriceAdapter` | `0xD2Cc2a7Eb4A5792cE6383CcD0f789C1A9c48ECf9` |
-| `PermitHandler` | `0x0D566aC9Dd1e20Fc63990bEEf6e8abBA876c896B` |
+| `AutomationManager` | `0x33e5e5b262e5d8ebc443e1c6c9f14215b020554d` |
+| `SwappiPriceAdapter` | `0x88c48e0e8f76493bb926131a2be779cc17ecbedf` |
+| `PermitHandler` | `0x4240882f2d9d70cdb9fbcc859cdd4d3e59f5d137` |
 | Swappi V2 Router | `0x873789aaF553FD0B4252d0D2b72C6331c47aff2E` |
 | Swappi V2 Factory | `0x36B83E0D41D1dd9C73a006F0c1cbC1F096E69E34` |
+
+> Canonical addresses are committed in `conflux-contracts/deployments.json` and baked into the SDK via `pnpm contracts:codegen`.
 
 ---
 
@@ -322,27 +339,104 @@ Services communicate over Docker's internal network; the frontend proxies
 ## Project Structure
 
 ```
-conflux-cas/
-├── shared/          # Zod schemas, shared TypeScript types
-├── contracts/       # Solidity + Hardhat (AutomationManager.sol)
-├── backend/         # Express API: auth, jobs, SSE, admin
-│   └── src/
-│       ├── routes/  # auth.ts, jobs.ts, admin.ts
-│       ├── services/ # job-service, keeper-client, admin-service
-│       ├── sse/     # Real-time event stream
-│       └── auth/    # SIWE + JWT middleware
-├── worker/          # Keeper daemon: price checks + on-chain execution
-│   └── src/
-│       ├── checker.ts   # Price oracle + condition evaluation
-│       ├── executor.ts  # On-chain execution via ethers.js
-│       └── main.ts      # Poll loop
-├── frontend/        # Next.js 14 App Router
-│   └── src/app/
-│       ├── api/[...path]/ # Backend proxy route handler
-│       ├── create/        # Strategy builder page
-│       ├── dashboard/     # Live job dashboard
-│       └── safety/        # Admin pause/resume
-└── docker-compose.yml
+/repos/                              ← pnpm workspace root
+├── conflux-sdk/                     # @cfxdevkit/sdk
+│   └── src/automation/
+│       ├── generated.ts             # auto-generated: ABIs + addresses + bytecode
+│       ├── abi.ts                   # re-exports under UPPER_CASE + camelCase names
+│       ├── types.ts                 # Job, SafetyConfig, etc.
+│       ├── safety-guard.ts
+│       ├── price-checker.ts
+│       └── retry-queue.ts
+├── conflux-contracts/               # @cfxdevkit/contracts (Hardhat)
+│   ├── contracts/
+│   │   ├── AutomationManager.sol
+│   │   ├── SwappiPriceAdapter.sol
+│   │   ├── PermitHandler.sol
+│   │   └── interfaces/ + mocks/
+│   ├── scripts/                     # deploy.ts, verify.ts, check-wallet.ts
+│   ├── test/                        # 57 Hardhat tests (>90% coverage)
+│   ├── deployments.json             # canonical on-chain addresses
+│   └── wagmi.config.ts              # codegen → ../conflux-sdk/src/automation/generated.ts
+└── conflux-cas/                     # application monorepo
+    ├── shared/                      # thin re-exports of SDK types + Zod schemas
+    ├── backend/src/
+    │   ├── routes/                  # auth.ts, jobs.ts, admin.ts, sse.ts
+    │   ├── services/                # job-service, keeper-client, admin-service
+    │   └── db/                      # Drizzle ORM + SQLite schema
+    ├── worker/src/
+    │   ├── job-poller.ts            # schedules execution ticks
+    │   ├── executor.ts              # on-chain tx via viem
+    │   ├── price-checker.ts         # reads SwappiPriceAdapter on-chain
+    │   ├── safety-guard.ts          # circuit breakers
+    │   └── retry-queue.ts           # exponential back-off retry
+    ├── frontend/src/app/
+    │   ├── page.tsx                 # home + strategy creation modal
+    │   ├── dashboard/               # live job table (SSE)
+    │   ├── job/[id]/                # strategy detail + execution history
+    │   ├── safety/                  # admin pause/resume panel
+    │   └── status/                  # worker heartbeat
+    └── docker-compose.yml
+```
+
+---
+
+## Documentation
+
+| File | Description |
+|------|-------------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagram, layer reference, full API route table, DB schema, deployment notes |
+| [docs/USER_MANUAL.md](docs/USER_MANUAL.md) | End-user guide — wallet setup, creating strategies, dashboard, safety panel |
+
+---
+
+## Troubleshooting
+
+### Wallet / Sign-in
+
+| Symptom | Fix |
+|---------|-----|
+| "Sign In" button does nothing | Make sure your wallet is on the correct network (Conflux eSpace Testnet chain ID `71` or Mainnet chain ID `1030`). MetaMask will show a network mismatch banner. |
+| SIWE modal closes but auth fails | The nonce expires after 5 minutes. Refresh the page and try again. |
+| "CORS error" in devtools console | The backend `CORS_ORIGIN` env var must match the exact origin (protocol + host + port). For local dev with HTTPS, add `https://localhost:3000` to the comma-separated list. |
+
+### Strategy Creation
+
+| Symptom | Fix |
+|---------|-----|
+| Transaction fails at "Approve" step | You may not have enough CFX to cover gas. Get testnet CFX from <https://faucet.confluxnetwork.org/>. |
+| "Wrapping CFX → wCFX" step appears | This is expected when `tokenIn = CFX` and your wCFX balance is below the strategy amount. The app wraps the shortfall automatically before the approval. |
+| Strategy stays in `pending` after creation | The worker may not be running. Check `/status` page — if "Worker Heartbeat" shows `stale`, restart the worker (`pnpm run dev:worker`). |
+| "Price condition not met" in job errors | The target price hasn't been reached on-chain. This is the system working correctly; the job will execute when conditions are met. |
+
+### Worker / Execution
+
+| Symptom | Fix |
+|---------|-----|
+| Worker exits immediately | Check `EXECUTOR_PRIVATE_KEY` (no `0x` prefix) and `CONFLUX_RPC_URL` in `.env`. Run `pnpm contracts:check-wallet` to validate the key. |
+| All jobs stuck in `active` with retries > 0 | The keeper wallet may be out of CFX for gas. Fund the `EXECUTOR_PRIVATE_KEY` address. |
+| `PriceConditionNotMet` on every tick | Normal — the target price has not been reached. Check via `SwappiPriceAdapter.getPrice()` to confirm. |
+| `JobNotActive` revert | The job was cancelled or already executed on-chain. The worker will sync the DB and mark it completed. |
+| Circuit breaker trips (worker halts) | 5 consecutive execution errors triggered the safety halt. Check logs for the root cause, fix, then restart the worker. |
+
+### Docker / Production
+
+| Symptom | Fix |
+|---------|-----|
+| Backend container `unhealthy` | Run `docker compose logs backend` to see the error. Most common: missing env vars in `.env`. |
+| Frontend shows blank page or 502 | nginx is not routing to the frontend container. Verify `docker compose ps` shows frontend `Up`. If deploying for the first time, wait ~30 s for containers to start. |
+| `/api/` returns 404 | nginx `proxy_pass` needs a trailing slash: `proxy_pass http://127.0.0.1:3001/;` — the slash strips the `/api/` prefix before forwarding. |
+| Token list won't load | The backend is fetching ~200+ Swappi pairs on first boot. This takes 10–30 s on testnet due to rate-limit-aware chunking. Wait and refresh. |
+| `SSE events` not updating dashboard | Check browser devtools → Network → filter `events`. If the SSE connection is closed, the client auto-reconnects every 5 s. A 30 s fallback poll also runs independently. |
+
+### Test Failures
+
+```bash
+# Reset the test database before running backend integration tests
+pnpm --filter @conflux-cas/backend test
+
+# If Hardhat tests fail with "nonce too low", reset the local node:
+pnpm --filter @conflux-cas/contracts test --bail
 ```
 
 ---

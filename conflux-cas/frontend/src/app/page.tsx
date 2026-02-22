@@ -35,21 +35,21 @@ function StrategyModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       aria-modal="true"
       role="dialog"
       aria-label="Create strategy"
     >
       {/* Backdrop — not clickable while tx is running */}
       <div
-        className={`absolute inset-0 bg-black/60 backdrop-blur-sm ${txInProgress ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`absolute inset-0 bg-black/70 backdrop-blur-sm ${txInProgress ? 'cursor-not-allowed' : 'cursor-pointer'}`}
         onClick={txInProgress ? undefined : onClose}
       />
 
-      {/* Slide-over panel */}
-      <div className="relative z-10 h-full w-full max-w-lg bg-slate-950 border-l border-slate-800 shadow-2xl shadow-black/60 flex flex-col overflow-y-auto animate-slide-in-right">
+      {/* Centered modal panel */}
+      <div className="relative z-10 w-full max-w-lg max-h-[90vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl shadow-black/60 flex flex-col overflow-hidden animate-modal-in">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 sticky top-0 bg-slate-950/90 backdrop-blur-sm z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
           <h2 className="text-lg font-semibold text-white tracking-tight">
             New Strategy
           </h2>
@@ -76,8 +76,8 @@ function StrategyModal({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 px-6 py-6">
+        {/* Body — scrollable */}
+        <div className="flex-1 overflow-y-auto px-6 py-6">
           <StrategyBuilder onSuccess={onClose} onSubmittingChange={setTxInProgress} />
         </div>
       </div>

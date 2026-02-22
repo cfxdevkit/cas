@@ -8,9 +8,12 @@ packages:
   - conflux-cas/frontend
 ignoredBuiltDependencies:
   - keccak
+  - bufferutil
+  - utf-8-validate
 onlyBuiltDependencies:
   - better-sqlite3
-  - bufferutil
   - esbuild
   - secp256k1
-  - utf-8-validate
+# bufferutil and utf-8-validate are optional native WS performance addons; omitting
+# them here skips their node-gyp compile and uses the pure-JS fallback instead.
+# This avoids ARM64 build failures since prebuilt binaries are unavailable.

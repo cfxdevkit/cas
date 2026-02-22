@@ -50,3 +50,6 @@ Thumbs.db
 
 # ── Certificates (local dev TLS) ─────────────────────────────────────────────
 conflux-cas/frontend/certificates/
+
+# ── Dev-only artifacts (not part of submission) ───────────────────────────────
+conflux-cas/docs/DEVIATIONS.md

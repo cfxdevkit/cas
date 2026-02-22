@@ -4,8 +4,49 @@
 > **Bounty:** #08 – Conflux Automation Site ($1,000)  
 > Last updated: 2026-02-22
 
-This document is the stable reference for the system as implemented.  
-For deviations from the original plan, see [DEVIATIONS.md](./DEVIATIONS.md).
+This document is the stable reference for the system as implemented.
+
+---
+
+## System Diagram
+
+```mermaid
+graph TB
+    subgraph Browser["User's Browser"]
+        FE["Next.js 14 Frontend\n(port 3000)\nwagmi · viem · Tailwind"]
+    end
+
+    subgraph Server["Production Server (cfxdevkit.org)"]
+        NG["nginx\nTLS termination\n/api/ → :3001"]
+        BE["Express Backend\n(port 3001)\nDrizzle ORM · SQLite"]
+        WK["Keeper Worker\nJob poller · SafetyGuard\nRetryQueue"]
+        DB[("SQLite\ndata/cas.db")]
+
+        NG -->|"proxy /api/*"| BE
+        BE <-->|"shared file"| DB
+        WK <-->|"shared file"| DB
+    end
+
+    subgraph Blockchain["Conflux eSpace (Chain ID 1030 / 71)"]
+        AM["AutomationManager.sol\nPausable · ReentrancyGuard"]
+        PA["SwappiPriceAdapter.sol"]
+        SR["Swappi V2 Router"]
+    end
+
+    FE -->|"HTTPS"| NG
+    FE -->|"SSE /api/sse/events"| NG
+    WK -->|"viem writeContract\nexecuteLimitOrder / executeDCATick"| AM
+    AM -->|"safeTransferFrom + swap"| SR
+    WK -->|"getAmountsOut"| PA
+    PA -->|"pair reserves"| SR
+
+    subgraph Auth["SIWE Auth Flow"]
+        direction LR
+        A1["GET /api/auth/nonce"] --> A2["Sign with wallet\n(off-chain)"] --> A3["POST /api/auth/verify\n→ JWT"]
+    end
+
+    FE -.->|"SIWE login"| Auth
+```
 
 ---
 
@@ -245,13 +286,15 @@ Next.js 14 App Router + Tailwind CSS + wagmi v2 + viem.
 
 | Route | Component | Description |
 |---|---|---|
-| `/` | `DashboardPage` | SSE-driven job list with live status |
-| `/create` | `CreatePage` → `StrategyBuilder` | Limit Order + DCA creation form |
+| `/` | `HomePage` | Home page — opens Strategy Creation modal |
+| `/dashboard` | `DashboardPage` | SSE-driven job list with live status |
 | `/job/[id]` | `JobDetailPage` | Strategy params, execution history, tx links |
-| `/admin` | `AdminPage` | Global pause/resume + audit log |
+| `/safety` | `SafetyPage` | Global pause/resume + audit log (admin only) |
+| `/status` | `StatusPage` | Worker heartbeat / liveness indicator |
+| `/create` | `CreatePage` → `StrategyBuilder` | Standalone Limit Order + DCA form (secondary) |
 
 ### Key Components
-- **`StrategyBuilder`** — Uniswap-style form; tabs for Limit/DCA; inline token selector pills; Market/+1/+5/+10% price presets; expiry quick-picks; per-pair field reset; price-loading shimmer states; **automatic CFX→wCFX wrapping** on submit (see *CFX / wCFX Transparency* below); inline wCFX wrap/unwrap utility panel
+- **`StrategyBuilder`** — Uniswap-style form; tabs for Limit/DCA; inline token selector pills; Market/+1/+5/+10% price presets; expiry quick-picks; per-pair field reset; price-loading shimmer states; **automatic CFX→wCFX wrapping** on submit (see *CFX / wCFX Transparency* below); inline wCFX wrap/unwrap utility panel. Submission opens a **4-step transaction stepper** (wrap → approve → on-chain register → backend save) rendered in a modal that blocks close/Escape/backdrop during execution.
 - **`JobCard`** — Status badge, retry counter, max-retries warning banner, Details link
 - **`JobTable` / `Dashboard`** — Compact horizontal table view (`JobRow`) replacing the previous tall `JobCard` stack. Each row shows: status badge, type, pair, amount, target / DCA progress + next tick, retries, created time, and actions (Details · Cancel). The component resolves token symbols and decimals from the `cas_pool_meta_v1` localStorage cache (no extra RPC on dashboard render) and subscribes to `/api/sse/events?token=` for live updates. It also implements an SSE `onerror` auto-reconnect (5s) and a 30s fallback poll to re-fetch jobs in case of missed events.
 - **`NavBar`** — SIWE sign-in, wallet connect, network badge

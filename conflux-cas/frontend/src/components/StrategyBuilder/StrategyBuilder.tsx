@@ -964,6 +964,144 @@ export function StrategyBuilder({
       {/* ══════════════════ LIMIT ORDER ═══════════════════════════════════ */}
       {kind === 'limit_order' && (
         <>
+          {/* Sell panel */}
+          <AmountPanel
+            label="Sell"
+            amount={amountIn}
+            onAmountChange={setAmountIn}
+            onMax={
+              tokenInInfo
+                ? () =>
+                    setAmountIn(
+                      tokenInIsCfx
+                        ? cfxMaxFormatted
+                        : tokenInInfo.balanceFormatted
+                    )
+                : undefined
+            }
+            tokens={mounted ? tokenInOptions : []}
+            selectedToken={tokenIn}
+            onTokenChange={(v) => {
+              setTokenIn(v);
+              setTokenOut('');
+            }}
+            usdValue={amountInUsd}
+            priceLoading={priceLoading}
+            balance={
+              tokenInIsCfx && wcfxBalWei > 0n ? inBalanceLabel : inBalance
+            }
+            balancesLoading={balancesLoading}
+            loading={!mounted || poolsLoading}
+            placeholder={
+              address && tokenInOptions.length < tokens.length
+                ? `${tokenInOptions.length} tokens in wallet…`
+                : 'Select token…'
+            }
+          />
+
+          {/* WCFX wrap/unwrap utility — shown when CFX native is selected as tokenIn */}
+          {tokenInIsCfx && mounted && address && (
+            <div className="rounded-xl border border-slate-700 bg-slate-800/50 overflow-hidden text-xs">
+              <button
+                type="button"
+                onClick={() => setShowWcfxPanel((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                <span>
+                  wCFX in wallet:&nbsp;
+                  <span
+                    className={
+                      parseFloat(wcfxInfo?.balanceFormatted ?? '0') > 0
+                        ? 'text-green-400 font-medium'
+                        : 'text-slate-500'
+                    }
+                  >
+                    {fmtBalance(wcfxInfo?.balanceFormatted ?? '0') ||
+                      '0.000000'}
+                  </span>
+                </span>
+                <span className="flex items-center gap-2">
+                  {needsAutoWrap && (
+                    <span className="text-amber-400">
+                      ⟳ {parseFloat(formatUnits(autoWrapAmount, 18)).toFixed(6)}{' '}
+                      CFX will auto-wrap
+                    </span>
+                  )}
+                  <span className="text-slate-500">
+                    {showWcfxPanel ? '▲' : '▼'} manage
+                  </span>
+                </span>
+              </button>
+              {showWcfxPanel && (
+                <div className="px-3 pb-3 border-t border-slate-700 space-y-2 pt-2">
+                  <div className="flex gap-2 items-center">
+                    {(['wrap', 'unwrap'] as const).map((tab) => (
+                      <button
+                        key={tab}
+                        type="button"
+                        onClick={() => setWcfxPanelTab(tab)}
+                        className={`px-3 py-1 rounded-lg font-medium transition-colors ${
+                          wcfxPanelTab === tab
+                            ? 'bg-conflux-600 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        {tab === 'wrap' ? 'CFX → wCFX' : 'wCFX → CFX'}
+                      </button>
+                    ))}
+                    <span className="ml-auto text-slate-500">
+                      {wcfxPanelTab === 'wrap'
+                        ? `Available: ${fmtBalance(tokenInInfo?.balanceFormatted ?? '0') || '0'} CFX`
+                        : `Available: ${fmtBalance(wcfxInfo?.balanceFormatted ?? '0') || '0'} wCFX`}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={wcfxPanelTab === 'wrap' ? wrapInput : unwrapInput}
+                      onChange={(e) =>
+                        wcfxPanelTab === 'wrap'
+                          ? setWrapInput(e.target.value)
+                          : setUnwrapInput(e.target.value)
+                      }
+                      placeholder="0.0"
+                      className="flex-1 bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-conflux-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        wcfxPanelTab === 'wrap'
+                          ? setWrapInput(tokenInInfo?.balanceFormatted ?? '0')
+                          : setUnwrapInput(wcfxInfo?.balanceFormatted ?? '0')
+                      }
+                      className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
+                    >
+                      Max
+                    </button>
+                  </div>
+                  {wrapError && <p className="text-red-400">{wrapError}</p>}
+                  {wrapSuccess && (
+                    <p className="text-green-400">✓ {wrapSuccess}</p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={wrapping || !address}
+                    onClick={
+                      wcfxPanelTab === 'wrap' ? handleWrap : handleUnwrap
+                    }
+                    className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition-colors text-sm"
+                  >
+                    {wrapping
+                      ? 'Waiting for confirmation…'
+                      : wcfxPanelTab === 'wrap'
+                        ? `Wrap ${wrapInput || '…'} CFX → wCFX`
+                        : `Unwrap ${unwrapInput || '…'} wCFX → CFX`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* "When N tokenIn is worth" ─ target price panel */}
           <div className="bg-slate-800 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between text-sm text-slate-400">
@@ -1109,144 +1247,6 @@ export function StrategyBuilder({
                 : `Swap when price falls to target (stop-loss). To buy ${tokenOutInfo?.symbol ?? 'the output token'} on a dip, flip the pair with ⇅.`}
             </p>
           </div>
-
-          {/* Sell panel */}
-          <AmountPanel
-            label="Sell"
-            amount={amountIn}
-            onAmountChange={setAmountIn}
-            onMax={
-              tokenInInfo
-                ? () =>
-                    setAmountIn(
-                      tokenInIsCfx
-                        ? cfxMaxFormatted
-                        : tokenInInfo.balanceFormatted
-                    )
-                : undefined
-            }
-            tokens={mounted ? tokenInOptions : []}
-            selectedToken={tokenIn}
-            onTokenChange={(v) => {
-              setTokenIn(v);
-              setTokenOut('');
-            }}
-            usdValue={amountInUsd}
-            priceLoading={priceLoading}
-            balance={
-              tokenInIsCfx && wcfxBalWei > 0n ? inBalanceLabel : inBalance
-            }
-            balancesLoading={balancesLoading}
-            loading={!mounted || poolsLoading}
-            placeholder={
-              address && tokenInOptions.length < tokens.length
-                ? `${tokenInOptions.length} tokens in wallet…`
-                : 'Select token…'
-            }
-          />
-
-          {/* WCFX wrap/unwrap utility — shown when CFX native is selected as tokenIn */}
-          {tokenInIsCfx && mounted && address && (
-            <div className="rounded-xl border border-slate-700 bg-slate-800/50 overflow-hidden text-xs">
-              <button
-                type="button"
-                onClick={() => setShowWcfxPanel((v) => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 text-slate-400 hover:text-slate-200 transition-colors"
-              >
-                <span>
-                  wCFX in wallet:&nbsp;
-                  <span
-                    className={
-                      parseFloat(wcfxInfo?.balanceFormatted ?? '0') > 0
-                        ? 'text-green-400 font-medium'
-                        : 'text-slate-500'
-                    }
-                  >
-                    {fmtBalance(wcfxInfo?.balanceFormatted ?? '0') ||
-                      '0.000000'}
-                  </span>
-                </span>
-                <span className="flex items-center gap-2">
-                  {needsAutoWrap && (
-                    <span className="text-amber-400">
-                      ⟳ {parseFloat(formatUnits(autoWrapAmount, 18)).toFixed(6)}{' '}
-                      CFX will auto-wrap
-                    </span>
-                  )}
-                  <span className="text-slate-500">
-                    {showWcfxPanel ? '▲' : '▼'} manage
-                  </span>
-                </span>
-              </button>
-              {showWcfxPanel && (
-                <div className="px-3 pb-3 border-t border-slate-700 space-y-2 pt-2">
-                  <div className="flex gap-2 items-center">
-                    {(['wrap', 'unwrap'] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setWcfxPanelTab(tab)}
-                        className={`px-3 py-1 rounded-lg font-medium transition-colors ${
-                          wcfxPanelTab === tab
-                            ? 'bg-conflux-600 text-white'
-                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
-                      >
-                        {tab === 'wrap' ? 'CFX → wCFX' : 'wCFX → CFX'}
-                      </button>
-                    ))}
-                    <span className="ml-auto text-slate-500">
-                      {wcfxPanelTab === 'wrap'
-                        ? `Available: ${fmtBalance(tokenInInfo?.balanceFormatted ?? '0') || '0'} CFX`
-                        : `Available: ${fmtBalance(wcfxInfo?.balanceFormatted ?? '0') || '0'} wCFX`}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={wcfxPanelTab === 'wrap' ? wrapInput : unwrapInput}
-                      onChange={(e) =>
-                        wcfxPanelTab === 'wrap'
-                          ? setWrapInput(e.target.value)
-                          : setUnwrapInput(e.target.value)
-                      }
-                      placeholder="0.0"
-                      className="flex-1 bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-conflux-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        wcfxPanelTab === 'wrap'
-                          ? setWrapInput(tokenInInfo?.balanceFormatted ?? '0')
-                          : setUnwrapInput(wcfxInfo?.balanceFormatted ?? '0')
-                      }
-                      className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
-                    >
-                      Max
-                    </button>
-                  </div>
-                  {wrapError && <p className="text-red-400">{wrapError}</p>}
-                  {wrapSuccess && (
-                    <p className="text-green-400">✓ {wrapSuccess}</p>
-                  )}
-                  <button
-                    type="button"
-                    disabled={wrapping || !address}
-                    onClick={
-                      wcfxPanelTab === 'wrap' ? handleWrap : handleUnwrap
-                    }
-                    className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition-colors text-sm"
-                  >
-                    {wrapping
-                      ? 'Waiting for confirmation…'
-                      : wcfxPanelTab === 'wrap'
-                        ? `Wrap ${wrapInput || '…'} CFX → wCFX`
-                        : `Unwrap ${unwrapInput || '…'} wCFX → CFX`}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Swap arrow */}
           <SwapArrow onClick={swapTokens} />
