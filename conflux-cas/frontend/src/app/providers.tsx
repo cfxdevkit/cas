@@ -9,6 +9,7 @@ import {
   WagmiProvider as WagmiProviderBase,
 } from 'wagmi';
 import { AuthProvider } from '@/lib/auth-context';
+import { PoolsProvider } from '@/lib/pools-context';
 
 // Conflux eSpace chains
 const espaceTestnet = {
@@ -72,7 +73,9 @@ export function WagmiProvider({ children }: { children: ReactNode }) {
   return (
     <WagmiProviderBase config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <PoolsProvider>{children}</PoolsProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </WagmiProviderBase>
   );

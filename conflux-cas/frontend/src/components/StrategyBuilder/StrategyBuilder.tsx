@@ -8,11 +8,11 @@ import {
   getPairedTokens,
   resolveTokenInAddress,
   type TokenWithBalance,
-  usePoolTokens,
   wcfxAddress,
 } from '@/hooks/usePoolTokens';
 import { useTokenPrice } from '@/hooks/useTokenPrice';
 import { useAuthContext } from '@/lib/auth-context';
+import { usePoolsContext } from '@/lib/pools-context';
 import {
   AUTOMATION_MANAGER_ABI,
   AUTOMATION_MANAGER_ADDRESS,
@@ -61,11 +61,6 @@ export function StrategyBuilder({
   const publicClient = usePublicClient();
   const { token } = useAuthContext();
 
-  // Prevent SSR/client hydration mismatch: wagmi reads localStorage on client
-  // but returns undefined on server — defer wallet-dependent rendering.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   const {
     tokens,
     pairs,
@@ -74,7 +69,10 @@ export function StrategyBuilder({
     error: poolsError,
     rpcWarning,
     refresh,
-  } = usePoolTokens(mounted ? address : undefined);
+  } = usePoolsContext();
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const [kind, setKind] = useState<StrategyKind>('limit_order');
   const [submitting, setSubmitting] = useState(false);
