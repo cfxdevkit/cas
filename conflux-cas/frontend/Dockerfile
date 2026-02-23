@@ -43,9 +43,6 @@ RUN pnpm --filter @conflux-cas/frontend build
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
 FROM node:20-slim AS runner
-
-# ── Stage 3: runtime ──────────────────────────────────────────────────────────
-FROM node:20-slim AS runner
 RUN apt-get update -qq && apt-get install -y --no-install-recommends wget && rm -rf /var/lib/apt/lists/*
 # Run from the original workspace path so pnpm symlinks resolve correctly
 WORKDIR /repos/conflux-cas/frontend
