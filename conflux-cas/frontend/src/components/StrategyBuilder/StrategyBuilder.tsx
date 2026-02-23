@@ -20,6 +20,15 @@ import {
   MAX_UINT256,
   WCFX_ABI,
 } from '@/lib/contracts';
+import {
+  ArrowDown,
+  CheckCircle2,
+  ChevronDown,
+  Info,
+  RefreshCcw,
+  X,
+  XCircle,
+} from 'lucide-react';
 
 type StrategyKind = 'limit_order' | 'dca';
 
@@ -80,15 +89,6 @@ export function StrategyBuilder({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [unlimitedApproval, setUnlimitedApproval] = useState(false);
-
-  // WCFX wrap/unwrap panel state
-  const [showWcfxPanel, setShowWcfxPanel] = useState(false);
-  const [wcfxPanelTab, setWcfxPanelTab] = useState<'wrap' | 'unwrap'>('wrap');
-  const [wrapInput, setWrapInput] = useState('');
-  const [unwrapInput, setUnwrapInput] = useState('');
-  const [wrapping, setWrapping] = useState(false);
-  const [wrapError, setWrapError] = useState<string | null>(null);
-  const [wrapSuccess, setWrapSuccess] = useState<string | null>(null);
 
   // Notify parent (e.g. StrategyModal) when the stepper overlay becomes visible
   // so it can block the close button until all transactions complete.
@@ -344,96 +344,7 @@ export function StrategyBuilder({
     tokenInIsCfx && requiredPreview > wcfxBalWei && requiredPreview > 0n;
   const autoWrapAmount = needsAutoWrap ? requiredPreview - wcfxBalWei : 0n;
 
-  // ── WCFX wrap / unwrap helpers ─────────────────────────────────────────────
-  async function handleWrap() {
-    setWrapError(null);
-    setWrapSuccess(null);
-    if (!address || !publicClient) return;
-    setWrapping(true);
-    try {
-      const amount = parseUnits(wrapInput.trim() || '0', 18);
-      if (amount <= 0n) {
-        setWrapError('Enter an amount.');
-        return;
-      }
-      const feeData = await publicClient.estimateFeesPerGas();
-      const mfpg = (feeData.maxFeePerGas * 120n) / 100n;
-      const mpfpg = (feeData.maxPriorityFeePerGas * 120n) / 100n;
-      const gas = await publicClient.estimateContractGas({
-        address: wcfxAddr,
-        abi: WCFX_ABI,
-        functionName: 'deposit',
-        value: amount,
-        account: address,
-      });
-      const hash = await writeContractAsync({
-        address: wcfxAddr,
-        abi: WCFX_ABI,
-        functionName: 'deposit',
-        value: amount,
-        gas: (gas * 130n) / 100n,
-        maxFeePerGas: mfpg,
-        maxPriorityFeePerGas: mpfpg,
-      });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        pollingInterval: 2_000,
-        timeout: 120_000,
-      });
-      setWrapSuccess(`${wrapInput} CFX wrapped to wCFX.`);
-      setWrapInput('');
-      refresh();
-    } catch (e: unknown) {
-      setWrapError((e as Error).message ?? 'Wrap failed.');
-    } finally {
-      setWrapping(false);
-    }
-  }
-
-  async function handleUnwrap() {
-    setWrapError(null);
-    setWrapSuccess(null);
-    if (!address || !publicClient) return;
-    setWrapping(true);
-    try {
-      const amount = parseUnits(unwrapInput.trim() || '0', 18);
-      if (amount <= 0n) {
-        setWrapError('Enter an amount.');
-        return;
-      }
-      const feeData = await publicClient.estimateFeesPerGas();
-      const mfpg = (feeData.maxFeePerGas * 120n) / 100n;
-      const mpfpg = (feeData.maxPriorityFeePerGas * 120n) / 100n;
-      const gas = await publicClient.estimateContractGas({
-        address: wcfxAddr,
-        abi: WCFX_ABI,
-        functionName: 'withdraw',
-        args: [amount],
-        account: address,
-      });
-      const hash = await writeContractAsync({
-        address: wcfxAddr,
-        abi: WCFX_ABI,
-        functionName: 'withdraw',
-        args: [amount],
-        gas: (gas * 130n) / 100n,
-        maxFeePerGas: mfpg,
-        maxPriorityFeePerGas: mpfpg,
-      });
-      await publicClient.waitForTransactionReceipt({
-        hash,
-        pollingInterval: 2_000,
-        timeout: 120_000,
-      });
-      setWrapSuccess(`${unwrapInput} wCFX unwrapped to CFX.`);
-      setUnwrapInput('');
-      refresh();
-    } catch (e: unknown) {
-      setWrapError((e as Error).message ?? 'Unwrap failed.');
-    } finally {
-      setWrapping(false);
-    }
-  }
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -482,8 +393,8 @@ export function StrategyBuilder({
       const slippageBps = parseInt(slippage, 10);
       const expiresAtSec = expiryPreset
         ? BigInt(
-            Math.floor(Date.now() / 1000) + parseInt(expiryPreset, 10) * 86_400
-          )
+          Math.floor(Date.now() / 1000) + parseInt(expiryPreset, 10) * 86_400
+        )
         : 0n;
 
       const amountInWei = parseUnits(amountIn.trim() || '0', tokenInDecimals);
@@ -502,56 +413,63 @@ export function StrategyBuilder({
       const tokenInIsNative =
         tokenIn.toLowerCase() === CFX_NATIVE_ADDRESS.toLowerCase();
 
-      // ── Initialise step tracker ────────────────────────────────────────────────────────────
-      const tokenSym = tokenInIsNative ? 'wCFX' : (tokenInInfo?.symbol ?? 'token');
-      setTxSteps([
-        { id: 'wrap',    label: 'Wrap CFX → wCFX',      detail: 'Pending…', status: tokenInIsNative ? 'idle' : 'skipped' },
-        { id: 'approve', label: `Approve ${tokenSym}`,  detail: 'Pending…', status: 'idle' },
-        { id: 'onchain', label: kind === 'dca' ? 'Register DCA job' : 'Register limit order', detail: 'Pending…', status: 'idle' },
-        { id: 'save',    label: 'Save strategy',         detail: 'Pending…', status: 'idle' },
-      ]);
-      activeStepId = tokenInIsNative ? 'wrap' : 'approve';
-
-      // ── 0. Auto-wrap CFX → wCFX if WCFX balance is insufficient ──────────
+      // ── 0. Check wCFX balance to determine if wrap step is needed ────────
+      let needsWrap = false;
+      let wcfxBal = 0n;
       if (tokenInIsNative && requiredAllowance > 0n) {
-        activeStepId = 'wrap';
-        setStep('wrap', 'active', 'Checking wCFX balance…');
-        const wcfxBal = (await publicClient.readContract({
+        wcfxBal = (await publicClient.readContract({
           address: wcfxAddr,
           abi: WCFX_ABI,
           functionName: 'balanceOf',
           args: [address],
         })) as bigint;
         if (wcfxBal < requiredAllowance) {
-          const shortfall = requiredAllowance - wcfxBal;
-          const shortfallFmt = parseFloat(formatUnits(shortfall, 18)).toFixed(6);
-          setStep('wrap', 'active', `Wrapping ${shortfallFmt} CFX → wCFX…`);
-          const wrapGas = await publicClient.estimateContractGas({
-            address: wcfxAddr,
-            abi: WCFX_ABI,
-            functionName: 'deposit',
-            value: shortfall,
-            account: address,
-          });
-          const wrapHash = await writeContractAsync({
-            address: wcfxAddr,
-            abi: WCFX_ABI,
-            functionName: 'deposit',
-            value: shortfall,
-            gas: withGasBuffer(wrapGas),
-            maxFeePerGas,
-            maxPriorityFeePerGas,
-          });
-          setStep('wrap', 'waiting', 'Waiting for wrap confirmation…', wrapHash);
-          await publicClient.waitForTransactionReceipt({
-            hash: wrapHash,
-            pollingInterval: 2_000,
-            timeout: 120_000,
-          });
-          setStep('wrap', 'done', `Wrapped ${shortfallFmt} CFX ✓`, wrapHash);
-        } else {
-          setStep('wrap', 'skipped', 'Sufficient wCFX balance');
+          needsWrap = true;
         }
+      }
+
+      // ── Initialise step tracker ──────────────────────────────────────────
+      const tokenSym = tokenInIsNative ? 'wCFX' : (tokenInInfo?.symbol ?? 'token');
+      const steps: TxStepDef[] = [];
+      if (needsWrap) {
+        steps.push({ id: 'wrap', label: 'Wrap CFX → wCFX', detail: 'Pending…', status: 'idle' });
+      }
+      steps.push(
+        { id: 'approve', label: `Approve ${tokenSym}`, detail: 'Pending…', status: 'idle' },
+        { id: 'onchain', label: kind === 'dca' ? 'Register DCA job' : 'Register limit order', detail: 'Pending…', status: 'idle' },
+        { id: 'save', label: 'Save strategy', detail: 'Pending…', status: 'idle' }
+      );
+      setTxSteps(steps);
+      activeStepId = needsWrap ? 'wrap' : 'approve';
+
+      // ── 1. Auto-wrap CFX → wCFX if WCFX balance is insufficient ──────────
+      if (needsWrap) {
+        const shortfall = requiredAllowance - wcfxBal;
+        const shortfallFmt = parseFloat(formatUnits(shortfall, 18)).toFixed(6);
+        setStep('wrap', 'active', `Wrapping ${shortfallFmt} CFX → wCFX…`);
+        const wrapGas = await publicClient.estimateContractGas({
+          address: wcfxAddr,
+          abi: WCFX_ABI,
+          functionName: 'deposit',
+          value: shortfall,
+          account: address,
+        });
+        const wrapHash = await writeContractAsync({
+          address: wcfxAddr,
+          abi: WCFX_ABI,
+          functionName: 'deposit',
+          value: shortfall,
+          gas: withGasBuffer(wrapGas),
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        });
+        setStep('wrap', 'waiting', 'Waiting for wrap confirmation…', wrapHash);
+        await publicClient.waitForTransactionReceipt({
+          hash: wrapHash,
+          pollingInterval: 2_000,
+          timeout: 120_000,
+        });
+        setStep('wrap', 'done', `Wrapped ${shortfallFmt} CFX ✓`, wrapHash);
       }
 
       // ── 1. ERC-20 approval (resolvedTokenIn is always ERC-20 — WCFX for native CFX) ──
@@ -725,8 +643,8 @@ export function StrategyBuilder({
         if (msg.includes('could not be found') || msg.includes('timed out')) {
           throw new Error(
             `On-chain registration timed out waiting for confirmation. ` +
-              `The transaction may still confirm — check your wallet activity or ConfluxScan. ` +
-              `If it confirms, re-open the Create page; the strategy will not be double-registered.`
+            `The transaction may still confirm — check your wallet activity or ConfluxScan. ` +
+            `If it confirms, re-open the Create page; the strategy will not be double-registered.`
           );
         }
         throw new Error(`On-chain registration failed: ${msg}`);
@@ -758,8 +676,8 @@ export function StrategyBuilder({
           ...(onChainJobId ? { onChainJobId } : {}),
           ...(expiryPreset
             ? {
-                expiresAt: Date.now() + parseInt(expiryPreset, 10) * 86_400_000,
-              }
+              expiresAt: Date.now() + parseInt(expiryPreset, 10) * 86_400_000,
+            }
             : {}),
         };
       } else {
@@ -818,8 +736,8 @@ export function StrategyBuilder({
   const estimatedOut =
     amountInNum > 0 && targetPriceNum > 0
       ? (amountInNum * targetPriceNum).toLocaleString(undefined, {
-          maximumFractionDigits: 6,
-        })
+        maximumFractionDigits: 6,
+      })
       : '0.0';
   const amountInUsd =
     tokenInUsd != null && amountInNum > 0
@@ -893,7 +811,7 @@ export function StrategyBuilder({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="w-full max-w-[480px] space-y-1">
+    <form onSubmit={handleSubmit} className="w-full max-w-[560px] mx-auto space-y-1">
       {/* ── Tx stepper overlay (replaces form content during submission) ─────── */}
       {txSteps !== null && (
         <TxStepperPanel
@@ -906,427 +824,310 @@ export function StrategyBuilder({
       )}
       {/* ── Form ─────────────────────────────────────────────────────────────── */}
       {txSteps === null && (<>
-      {/* ── Tab bar ──────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-1 mb-3">
-        {(['limit_order', 'dca'] as StrategyKind[]).map((k) => (
-          <button
-            key={k}
-            type="button"
-            onClick={() => setKind(k)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              kind === k
+        {/* ── Tab bar ──────────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-1 mb-3">
+          {(['limit_order', 'dca'] as StrategyKind[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${kind === k
                 ? 'bg-slate-700 text-white ring-1 ring-conflux-500'
                 : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {k === 'limit_order' ? 'Limit' : 'DCA'}
-          </button>
-        ))}
-      </div>
+                }`}
+            >
+              {k === 'limit_order' ? 'Limit' : 'DCA'}
+            </button>
+          ))}
+        </div>
 
-      {/* ── Banners ──────────────────────────────────────────────────────── */}
-      {mounted && poolsError && (
-        <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-950 border border-amber-800 rounded-lg px-3 py-2 mb-2">
-          <span>⚠ Could not load token list: {poolsError}</span>
-          <button type="button" onClick={refresh} className="underline ml-auto">
-            Retry
-          </button>
-        </div>
-      )}
-      {mounted && rpcWarning && !poolsError && (
-        <div className="flex items-center gap-2 text-xs text-yellow-400 bg-yellow-950 border border-yellow-800 rounded-lg px-3 py-2 mb-2">
-          <span>⚠ Balance fetch degraded. Shown balances may be stale.</span>
-          <button type="button" onClick={refresh} className="underline ml-auto">
-            Retry
-          </button>
-        </div>
-      )}
-      {mounted && priceError && tokenIn && tokenOut && (
-        <div className="flex items-center gap-2 text-xs text-orange-400 bg-orange-950 border border-orange-800 rounded-lg px-3 py-2 mb-2">
-          <span>⚠ {priceError}</span>
-        </div>
-      )}
-      {successMsg && (
-        <div className="flex items-center gap-2 text-xs text-green-300 bg-green-950 border border-green-700 rounded-lg px-3 py-2 mb-2">
-          <span>✓ {successMsg}</span>
-          <button
-            type="button"
-            onClick={() => setSuccessMsg(null)}
-            className="ml-auto text-green-500 hover:text-green-300"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+        {/* ── Banners ──────────────────────────────────────────────────────── */}
+        {mounted && poolsError && (
+          <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-950 border border-amber-800 rounded-lg px-3 py-2 mb-2">
+            <span>⚠ Could not load token list: {poolsError}</span>
+            <button type="button" onClick={refresh} className="underline ml-auto">
+              Retry
+            </button>
+          </div>
+        )}
+        {mounted && rpcWarning && !poolsError && (
+          <div className="flex items-center gap-2 text-xs text-yellow-400 bg-yellow-950 border border-yellow-800 rounded-lg px-3 py-2 mb-2">
+            <span>⚠ Balance fetch degraded. Shown balances may be stale.</span>
+            <button type="button" onClick={refresh} className="underline ml-auto">
+              Retry
+            </button>
+          </div>
+        )}
+        {mounted && priceError && tokenIn && tokenOut && (
+          <div className="flex items-center gap-2 text-xs text-orange-400 bg-orange-950 border border-orange-800 rounded-lg px-3 py-2 mb-2">
+            <span>⚠ {priceError}</span>
+          </div>
+        )}
+        {successMsg && (
+          <div className="flex items-center gap-2 text-xs text-green-300 bg-green-950 border border-green-700 rounded-lg px-3 py-2 mb-2">
+            <span><CheckCircle2 className="h-4 w-4 inline-block mr-1" /> {successMsg}</span>
+            <button
+              type="button"
+              onClick={() => setSuccessMsg(null)}
+              className="ml-auto text-green-500 hover:text-green-300"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
-      {/* ══════════════════ LIMIT ORDER ═══════════════════════════════════ */}
-      {kind === 'limit_order' && (
-        <>
-          {/* Sell panel */}
-          <AmountPanel
-            label="Sell"
-            amount={amountIn}
-            onAmountChange={setAmountIn}
-            onMax={
-              tokenInInfo
-                ? () =>
+        {/* ══════════════════ LIMIT ORDER ═══════════════════════════════════ */}
+        {kind === 'limit_order' && (
+          <>
+            {/* Sell panel */}
+            <AmountPanel
+              label="Sell"
+              amount={amountIn}
+              onAmountChange={setAmountIn}
+              onMax={
+                tokenInInfo
+                  ? () =>
                     setAmountIn(
                       tokenInIsCfx
                         ? cfxMaxFormatted
                         : tokenInInfo.balanceFormatted
                     )
-                : undefined
-            }
-            tokens={mounted ? tokenInOptions : []}
-            selectedToken={tokenIn}
-            onTokenChange={(v) => {
-              setTokenIn(v);
-              setTokenOut('');
-            }}
-            usdValue={amountInUsd}
-            priceLoading={priceLoading}
-            balance={
-              tokenInIsCfx && wcfxBalWei > 0n ? inBalanceLabel : inBalance
-            }
-            balancesLoading={balancesLoading}
-            loading={!mounted || poolsLoading}
-            placeholder={
-              address && tokenInOptions.length < tokens.length
-                ? `${tokenInOptions.length} tokens in wallet…`
-                : 'Select token…'
-            }
-          />
+                  : undefined
+              }
+              tokens={mounted ? tokenInOptions : []}
+              selectedToken={tokenIn}
+              onTokenChange={(v) => {
+                setTokenIn(v);
+                setTokenOut('');
+              }}
+              usdValue={amountInUsd}
+              priceLoading={priceLoading}
+              balance={
+                tokenInIsCfx && wcfxBalWei > 0n ? inBalanceLabel : inBalance
+              }
+              balancesLoading={balancesLoading}
+              loading={!mounted || poolsLoading}
+              placeholder={
+                address && tokenInOptions.length < tokens.length
+                  ? `${tokenInOptions.length} tokens in wallet…`
+                  : 'Select token…'
+              }
+            />
 
-          {/* WCFX wrap/unwrap utility — shown when CFX native is selected as tokenIn */}
-          {tokenInIsCfx && mounted && address && (
-            <div className="rounded-xl border border-slate-700 bg-slate-800/50 overflow-hidden text-xs">
-              <button
-                type="button"
-                onClick={() => setShowWcfxPanel((v) => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 text-slate-400 hover:text-slate-200 transition-colors"
-              >
+            {needsAutoWrap && (
+              <div className="mt-3 px-3 py-2 bg-amber-950/40 border border-amber-900/50 rounded-lg text-amber-500 text-xs font-medium flex items-center gap-2">
+                <Info className="w-4 h-4" />
                 <span>
-                  wCFX in wallet:&nbsp;
-                  <span
-                    className={
-                      parseFloat(wcfxInfo?.balanceFormatted ?? '0') > 0
-                        ? 'text-green-400 font-medium'
-                        : 'text-slate-500'
-                    }
+                  Requires wrapping <b>{fmtBalance(formatUnits(autoWrapAmount, 18))} CFX</b>. This will be done automatically.
+                </span>
+              </div>
+            )}
+
+            <SwapArrow />
+
+            {/* Buy panel (tokenOut, no amount field) */}
+            <div className="flex flex-col gap-3 mt-3 relative z-20">
+              {/* Buy panel (target price) */}
+              <div className="bg-slate-800/40 border border-slate-700/50 backdrop-blur-md rounded-2xl p-5 space-y-4 hover:border-slate-700 transition-colors relative z-20">
+                <div className="flex items-center justify-between text-sm text-slate-400">
+                  <span className="inline-flex items-center gap-1">
+                    When 1
+                    <TokenPill token={tokenInInfo} fallback="?" />
+                    is worth
+                  </span>
+                  <button
+                    type="button"
+                    onClick={swapTokens}
+                    title="Swap tokens"
+                    className="w-7 h-7 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-300 transition-colors"
                   >
-                    {fmtBalance(wcfxInfo?.balanceFormatted ?? '0') ||
-                      '0.000000'}
-                  </span>
-                </span>
-                <span className="flex items-center gap-2">
-                  {needsAutoWrap && (
-                    <span className="text-amber-400">
-                      ⟳ {parseFloat(formatUnits(autoWrapAmount, 18)).toFixed(6)}{' '}
-                      CFX will auto-wrap
-                    </span>
+                    ⇅
+                  </button>
+                </div>
+                {/* Current market price strip */}
+                {mounted && tokenInInfo && tokenOutInfo && (
+                  <div className="text-xs text-slate-500 flex items-center gap-1">
+                    <span>Market:</span>
+                    {priceLoading ? (
+                      <span className="animate-pulse text-slate-600">
+                        fetching…
+                      </span>
+                    ) : swappiPrice ? (
+                      <span className="text-conflux-400 font-medium">
+                        {swappiPrice} {tokenOutInfo.symbol}
+                      </span>
+                    ) : (
+                      <span className="text-orange-500">unavailable</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        refreshPrice();
+                        refresh();
+                      }}
+                      title="Refresh price &amp; balances"
+                      className="ml-auto text-slate-600 hover:text-slate-300 transition-colors"
+                    >
+                      <RefreshCcw className={`h-3 w-3 ${priceLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    {priceLoading && !targetPrice ? (
+                      <div className="flex-1 h-10 bg-slate-700 rounded-lg animate-pulse" />
+                    ) : (
+                      <input
+                        type="text"
+                        value={targetPrice}
+                        onChange={(e) => setTargetPrice(e.target.value)}
+                        placeholder={swappiPrice ?? '0.00'}
+                        className="flex-1 bg-transparent text-2xl tracking-tight font-semibold text-white placeholder-slate-600 focus:outline-none min-w-0"
+                      />
+                    )}
+                    <TokenSelectButton
+                      tokens={mounted ? (tokenIn ? tokenOutOptions : tokens) : []}
+                      value={tokenOut}
+                      onChange={setTokenOut}
+                      loading={!mounted || poolsLoading}
+                    />
+                  </div>
+                  {/* Trigger price in USD */}
+                  {mounted && tokenOutUsd != null && targetPriceNum > 0 && (
+                    <div className="text-xs text-slate-500">
+                      ≈{' '}
+                      <span className="text-slate-400">
+                        $
+                        {(targetPriceNum * tokenOutUsd).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 4,
+                        })}
+                      </span>
+                    </div>
                   )}
-                  <span className="text-slate-500">
-                    {showWcfxPanel ? '▲' : '▼'} manage
-                  </span>
-                </span>
-              </button>
-              {showWcfxPanel && (
-                <div className="px-3 pb-3 border-t border-slate-700 space-y-2 pt-2">
-                  <div className="flex gap-2 items-center">
-                    {(['wrap', 'unwrap'] as const).map((tab) => (
+                </div>
+
+                {/* Presets + direction toggle */}
+                <div className="flex justify-between items-center gap-1 pt-1 border-t border-slate-700/50 mt-2">
+                  <div className="flex gap-1">
+                    {[1, 5, 10].map((p) => (
                       <button
-                        key={tab}
+                        key={p}
                         type="button"
-                        onClick={() => setWcfxPanelTab(tab)}
-                        className={`px-3 py-1 rounded-lg font-medium transition-colors ${
-                          wcfxPanelTab === tab
-                            ? 'bg-conflux-600 text-white'
-                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
+                        disabled={priceLoading || !swappiPrice}
+                        onClick={() => applyPct(direction === 'gte' ? p : -p)}
+                        className="px-2 py-1 rounded border border-slate-700 hover:bg-slate-700 text-[10px] text-slate-300 transition-colors shrink-0 disabled:opacity-40"
                       >
-                        {tab === 'wrap' ? 'CFX → wCFX' : 'wCFX → CFX'}
+                        {direction === 'gte' ? '+' : '-'}{p}%
                       </button>
                     ))}
-                    <span className="ml-auto text-slate-500">
-                      {wcfxPanelTab === 'wrap'
-                        ? `Available: ${fmtBalance(tokenInInfo?.balanceFormatted ?? '0') || '0'} CFX`
-                        : `Available: ${fmtBalance(wcfxInfo?.balanceFormatted ?? '0') || '0'} wCFX`}
-                    </span>
                   </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={wcfxPanelTab === 'wrap' ? wrapInput : unwrapInput}
-                      onChange={(e) =>
-                        wcfxPanelTab === 'wrap'
-                          ? setWrapInput(e.target.value)
-                          : setUnwrapInput(e.target.value)
-                      }
-                      placeholder="0.0"
-                      className="flex-1 bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-conflux-500"
-                    />
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-medium hidden sm:inline-block">
+                      {direction === 'gte' ? 'Sell Higher' : 'Stop Loss'}
+                    </span>
                     <button
                       type="button"
                       onClick={() =>
-                        wcfxPanelTab === 'wrap'
-                          ? setWrapInput(tokenInInfo?.balanceFormatted ?? '0')
-                          : setUnwrapInput(wcfxInfo?.balanceFormatted ?? '0')
+                        setDirection((d) => (d === 'gte' ? 'lte' : 'gte'))
                       }
-                      className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
+                      title={
+                        direction === 'gte'
+                          ? 'Execute when price rises to target.'
+                          : 'Execute when price drops to target.'
+                      }
+                      className={`flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-semibold transition-colors border ${direction === 'gte'
+                        ? 'border-green-700/50 text-green-400 bg-green-950/40 hover:bg-green-900/40'
+                        : 'border-red-700/50 text-red-400 bg-red-950/40 hover:bg-red-900/40'
+                        }`}
                     >
-                      Max
+                      {direction === 'gte' ? '▲ ≥ target' : '▼ ≤ target'}
                     </button>
                   </div>
-                  {wrapError && <p className="text-red-400">{wrapError}</p>}
-                  {wrapSuccess && (
-                    <p className="text-green-400">✓ {wrapSuccess}</p>
-                  )}
-                  <button
-                    type="button"
-                    disabled={wrapping || !address}
-                    onClick={
-                      wcfxPanelTab === 'wrap' ? handleWrap : handleUnwrap
-                    }
-                    className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition-colors text-sm"
-                  >
-                    {wrapping
-                      ? 'Waiting for confirmation…'
-                      : wcfxPanelTab === 'wrap'
-                        ? `Wrap ${wrapInput || '…'} CFX → wCFX`
-                        : `Unwrap ${unwrapInput || '…'} wCFX → CFX`}
-                  </button>
                 </div>
-              )}
-            </div>
-          )}
+              </div>
 
-          {/* "When N tokenIn is worth" ─ target price panel */}
-          <div className="bg-slate-800 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between text-sm text-slate-400">
-              <span className="inline-flex items-center gap-1">
-                When 1
-                <TokenPill token={tokenInInfo} fallback="?" />
-                {tokenInInfo?.symbol ?? '—'} is worth
-              </span>
-              <button
-                type="button"
-                onClick={swapTokens}
-                title="Swap tokens"
-                className="w-7 h-7 rounded-full bg-slate-700 hover:bg-slate-600 flex items-center justify-center text-slate-300 transition-colors"
-              >
-                ⇅
-              </button>
-            </div>
-            {/* Current market price strip */}
-            {mounted && tokenInInfo && tokenOutInfo && (
-              <div className="text-xs text-slate-500 flex items-center gap-1">
-                <span>Market:</span>
-                {priceLoading ? (
-                  <span className="animate-pulse text-slate-600">
-                    fetching…
-                  </span>
-                ) : swappiPrice ? (
-                  <span className="text-conflux-400 font-medium">
-                    {swappiPrice} {tokenOutInfo.symbol}
-                  </span>
-                ) : (
-                  <span className="text-orange-500">unavailable</span>
-                )}
-                {tokenInUsd != null && (
-                  <span className="ml-1 text-slate-600">
-                    (${tokenInUsd.toFixed(3)})
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    refreshPrice();
-                    refresh();
-                  }}
-                  title="Refresh price &amp; balances"
-                  className="ml-auto text-slate-600 hover:text-slate-300 transition-colors"
-                >
-                  {priceLoading ? (
-                    <span className="animate-spin inline-block">↻</span>
-                  ) : (
-                    '↻'
+              {/* Output & Expiry row */}
+              <div className="bg-slate-800/40 border border-slate-700/50 backdrop-blur-md rounded-2xl p-5 flex flex-col sm:flex-row gap-6 hover:border-slate-700 transition-colors relative z-10">
+                {/* Buy panel (read-only estimated output) */}
+                <div className="flex-1 flex flex-col justify-center">
+                  <span className="text-sm font-medium text-slate-400 mb-2">Estimated Output</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-semibold text-white tracking-tight truncate flex-1">
+                      {estimatedOut !== '0.0' ? estimatedOut : '0.00'}
+                    </span>
+                    <TokenPill token={tokenOutInfo} fallback="?" />
+                  </div>
+                  {estimatedOutUsd && (
+                    <div className="text-xs text-slate-500 mt-1">
+                      ≈ ${estimatedOutUsd}
+                    </div>
                   )}
-                </button>
-                {priceLastUpdated && !priceLoading && (
-                  <ElapsedLabel since={priceLastUpdated} />
-                )}
-              </div>
-            )}
+                </div>
 
-            <div className="flex items-center gap-3">
-              {priceLoading && !targetPrice ? (
-                <div className="flex-1 h-10 bg-slate-700 rounded-lg animate-pulse" />
-              ) : (
-                <input
-                  type="text"
-                  value={targetPrice}
-                  onChange={(e) => setTargetPrice(e.target.value)}
-                  placeholder={swappiPrice ?? '0.00'}
-                  className="flex-1 bg-transparent text-3xl font-semibold text-white placeholder-slate-600 focus:outline-none min-w-0"
-                />
-              )}
-              <TokenSelectButton
-                tokens={mounted ? (tokenIn ? tokenOutOptions : tokens) : []}
-                value={tokenOut}
-                onChange={setTokenOut}
-                loading={!mounted || poolsLoading}
-              />
+                <div className="w-px bg-slate-700/50 hidden sm:block"></div>
+                <div className="h-px bg-slate-700/50 sm:hidden block"></div>
+
+                {/* Expiry */}
+                <div className="flex-1 flex flex-col justify-center gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-slate-300">Expiry</span>
+                    <span className="text-xs text-slate-500">{expiryPreset ? EXPIRY_LABELS[expiryPreset as keyof typeof EXPIRY_LABELS] : ''}</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {(['1', '7', '30', '365'] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setExpiryPreset(expiryPreset === d ? '' : d)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${expiryPreset === d
+                          ? 'bg-conflux-500 text-white shadow-md shadow-conflux-500/20'
+                          : 'bg-slate-900/50 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-slate-700/50'
+                          }`}
+                      >
+                        1 {d === '1' ? 'Day' : d === '7' ? 'Wk' : d === '30' ? 'Mo' : 'Yr'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-            {/* Trigger price in USD */}
-            {mounted && tokenOutUsd != null && targetPriceNum > 0 && (
-              <div className="text-xs text-slate-500">
-                ≈{' '}
+          </>
+        )}
+
+        {/* ══════════════════ DCA ═══════════════════════════════════════════ */}
+        {kind === 'dca' && (
+          <>
+            {/* Price info strip */}
+            {mounted && swappiPrice && tokenInInfo && tokenOutInfo && (
+              <div className="text-sm text-conflux-400 pb-1 flex items-center gap-1">
+                <span className="text-slate-400">↗</span>
+                <span>1 {tokenInInfo.symbol}</span>
+                {tokenInUsd != null && (
+                  <span className="text-slate-500">
+                    (${tokenInUsd.toFixed(2)})
+                  </span>
+                )}
                 <span className="text-slate-400">
-                  $
-                  {(targetPriceNum * tokenOutUsd).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 4,
-                  })}
-                </span>{' '}
-                per {tokenInInfo?.symbol ?? 'token'} at trigger
+                  = {swappiPrice} {tokenOutInfo.symbol}
+                </span>
+                {tokenOutUsd != null && (
+                  <span className="text-slate-500">
+                    (${tokenOutUsd.toFixed(2)})
+                  </span>
+                )}
               </div>
             )}
 
-            {/* Presets + direction toggle */}
-            <div className="flex gap-2 items-center">
-              <button
-                type="button"
-                disabled={priceLoading || !swappiPrice}
-                onClick={() => swappiPrice && setTargetPrice(swappiPrice)}
-                className="px-3 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-slate-200 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {priceLoading ? (
-                  <span className="animate-pulse">…</span>
-                ) : (
-                  'Market'
-                )}
-              </button>
-              {[1, 5, 10].map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  disabled={priceLoading || !swappiPrice}
-                  onClick={() => applyPct(direction === 'gte' ? p : -p)}
-                  className="px-3 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-slate-200 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {direction === 'gte' ? '+' : '-'}
-                  {p}%
-                </button>
-              ))}
-              {/* Direction toggle — clearly describes the trigger condition */}
-              <button
-                type="button"
-                onClick={() =>
-                  setDirection((d) => (d === 'gte' ? 'lte' : 'gte'))
-                }
-                title={
-                  direction === 'gte'
-                    ? 'Currently: execute when price rises to target. Click to flip.'
-                    : 'Currently: execute when price drops to target. Click to flip.'
-                }
-                className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors border ${
-                  direction === 'gte'
-                    ? 'border-green-700 text-green-400 bg-green-950 hover:bg-green-900'
-                    : 'border-red-700 text-red-400 bg-red-950 hover:bg-red-900'
-                }`}
-              >
-                {direction === 'gte' ? '▲ price ≥ target' : '▼ price ≤ target'}
-              </button>
-            </div>
-            {/* Contextual hint */}
-            <p className="text-xs text-slate-500">
-              {direction === 'gte'
-                ? `Swap when price rises to target (take profit / sell high).`
-                : `Swap when price falls to target (stop-loss). To buy ${tokenOutInfo?.symbol ?? 'the output token'} on a dip, flip the pair with ⇅.`}
-            </p>
-          </div>
-
-          {/* Swap arrow */}
-          <SwapArrow onClick={swapTokens} />
-
-          {/* Buy panel (read-only estimated output) */}
-          <AmountPanel
-            label="Buy"
-            amount={estimatedOut !== '0.0' ? estimatedOut : ''}
-            onAmountChange={() => undefined}
-            tokens={mounted ? (tokenIn ? tokenOutOptions : tokens) : []}
-            selectedToken={tokenOut}
-            onTokenChange={setTokenOut}
-            usdValue={estimatedOutUsd}
-            priceLoading={priceLoading}
-            balance={outBalance}
-            balancesLoading={balancesLoading}
-            loading={!mounted || poolsLoading}
-            placeholder="Select token…"
-            readOnly
-          />
-
-          {/* Expiry */}
-          <div className="flex items-center gap-2 mt-3 px-1">
-            <span className="text-sm text-slate-400 mr-1">Expiry</span>
-            <span
-              title="Order will be cancelled after this period"
-              className="text-slate-500 text-xs cursor-default"
-            >
-              ⓘ
-            </span>
-            <div className="flex gap-2 ml-auto">
-              {(['1', '7', '30', '365'] as const).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setExpiryPreset(expiryPreset === d ? '' : d)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    expiryPreset === d
-                      ? 'bg-conflux-600 text-white'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                  }`}
-                >
-                  {EXPIRY_LABELS[d]}
-                </button>
-              ))}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ══════════════════ DCA ═══════════════════════════════════════════ */}
-      {kind === 'dca' && (
-        <>
-          {/* Price info strip */}
-          {mounted && swappiPrice && tokenInInfo && tokenOutInfo && (
-            <div className="text-sm text-conflux-400 pb-1 flex items-center gap-1">
-              <span className="text-slate-400">↗</span>
-              <span>1 {tokenInInfo.symbol}</span>
-              {tokenInUsd != null && (
-                <span className="text-slate-500">
-                  (${tokenInUsd.toFixed(2)})
-                </span>
-              )}
-              <span className="text-slate-400">
-                = {swappiPrice} {tokenOutInfo.symbol}
-              </span>
-              {tokenOutUsd != null && (
-                <span className="text-slate-500">
-                  (${tokenOutUsd.toFixed(2)})
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Allocate panel (tokenIn + total amount) */}
-          <AmountPanel
-            label="Allocate"
-            amount={amountPerSwap}
-            onAmountChange={setAmountPerSwap}
-            onMax={
-              tokenInInfo
-                ? () => {
+            {/* Allocate panel (tokenIn + total amount) */}
+            <AmountPanel
+              label="Allocate"
+              amount={amountPerSwap}
+              onAmountChange={setAmountPerSwap}
+              onMax={
+                tokenInInfo
+                  ? () => {
                     const totalWei = tokenInIsCfx
                       ? cfxEffectiveWei
                       : BigInt(tokenInInfo.balanceWei ?? '0');
@@ -1336,322 +1137,209 @@ export function StrategyBuilder({
                         : totalWei;
                     setAmountPerSwap(formatUnits(perSwapWei, tokenInDecimals));
                   }
-                : undefined
-            }
-            tokens={mounted ? tokenInOptions : []}
-            selectedToken={tokenIn}
-            onTokenChange={(v) => {
-              setTokenIn(v);
-              setTokenOut('');
-            }}
-            usdValue={perTradeUsd}
-            priceLoading={priceLoading}
-            balance={
-              tokenInIsCfx && wcfxBalWei > 0n ? inBalanceLabel : inBalance
-            }
-            balancesLoading={balancesLoading}
-            loading={!mounted || poolsLoading}
-            placeholder="Select token…"
-          />
-
-          {/* WCFX wrap/unwrap utility — shown when CFX native is selected as tokenIn */}
-          {tokenInIsCfx && mounted && address && (
-            <div className="rounded-xl border border-slate-700 bg-slate-800/50 overflow-hidden text-xs">
-              <button
-                type="button"
-                onClick={() => setShowWcfxPanel((v) => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 text-slate-400 hover:text-slate-200 transition-colors"
-              >
+                  : undefined
+              }
+              tokens={mounted ? tokenInOptions : []}
+              selectedToken={tokenIn}
+              onTokenChange={(v) => {
+                setTokenIn(v);
+                setTokenOut('');
+              }}
+              usdValue={perTradeUsd}
+              priceLoading={priceLoading}
+              balance={
+                tokenInIsCfx && wcfxBalWei > 0n ? inBalanceLabel : inBalance
+              }
+              balancesLoading={balancesLoading}
+              loading={!mounted || poolsLoading}
+              placeholder="Select token…"
+            />
+            {needsAutoWrap && (
+              <div className="mt-3 px-3 py-2 bg-amber-950/40 border border-amber-900/50 rounded-lg text-amber-500 text-xs font-medium flex items-center gap-2">
+                <Info className="w-4 h-4" />
                 <span>
-                  wCFX in wallet:&nbsp;
-                  <span
-                    className={
-                      parseFloat(wcfxInfo?.balanceFormatted ?? '0') > 0
-                        ? 'text-green-400 font-medium'
-                        : 'text-slate-500'
-                    }
-                  >
-                    {fmtBalance(wcfxInfo?.balanceFormatted ?? '0') ||
-                      '0.000000'}
-                  </span>
+                  Requires wrapping <b>{fmtBalance(formatUnits(autoWrapAmount, 18))} CFX</b>. This will be done automatically.
                 </span>
-                <span className="flex items-center gap-2">
-                  {needsAutoWrap && (
-                    <span className="text-amber-400">
-                      ⟳ {parseFloat(formatUnits(autoWrapAmount, 18)).toFixed(6)}{' '}
-                      CFX will auto-wrap
+              </div>
+            )}
+
+            <SwapArrow />
+
+            {/* Buy panel (tokenOut, no amount field) */}
+            <div className="bg-slate-800/40 border border-slate-700/50 backdrop-blur-md rounded-2xl p-5 space-y-3 hover:border-slate-700 transition-colors relative z-20">
+              <span className="text-sm font-medium text-slate-400">Buy</span>
+              <div className="flex items-center justify-end">
+                <div className="ml-auto flex flex-col items-end gap-1.5">
+                  <TokenSelectButton
+                    tokens={mounted ? (tokenIn ? tokenOutOptions : tokens) : []}
+                    value={tokenOut}
+                    onChange={setTokenOut}
+                    loading={!mounted || poolsLoading}
+                    placeholder="Select token"
+                  />
+                  {tokenOutInfo && (
+                    <span className="text-sm font-medium text-slate-500">
+                      Balance: {outBalance}
                     </span>
                   )}
-                  <span className="text-slate-500">
-                    {showWcfxPanel ? '▲' : '▼'} manage
-                  </span>
-                </span>
-              </button>
-              {showWcfxPanel && (
-                <div className="px-3 pb-3 border-t border-slate-700 space-y-2 pt-2">
-                  <div className="flex gap-2 items-center">
-                    {(['wrap', 'unwrap'] as const).map((tab) => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setWcfxPanelTab(tab)}
-                        className={`px-3 py-1 rounded-lg font-medium transition-colors ${
-                          wcfxPanelTab === tab
-                            ? 'bg-conflux-600 text-white'
-                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
-                      >
-                        {tab === 'wrap' ? 'CFX → wCFX' : 'wCFX → CFX'}
-                      </button>
-                    ))}
-                    <span className="ml-auto text-slate-500">
-                      {wcfxPanelTab === 'wrap'
-                        ? `Available: ${fmtBalance(tokenInInfo?.balanceFormatted ?? '0') || '0'} CFX`
-                        : `Available: ${fmtBalance(wcfxInfo?.balanceFormatted ?? '0') || '0'} wCFX`}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={wcfxPanelTab === 'wrap' ? wrapInput : unwrapInput}
-                      onChange={(e) =>
-                        wcfxPanelTab === 'wrap'
-                          ? setWrapInput(e.target.value)
-                          : setUnwrapInput(e.target.value)
-                      }
-                      placeholder="0.0"
-                      className="flex-1 bg-slate-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-conflux-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() =>
-                        wcfxPanelTab === 'wrap'
-                          ? setWrapInput(tokenInInfo?.balanceFormatted ?? '0')
-                          : setUnwrapInput(wcfxInfo?.balanceFormatted ?? '0')
-                      }
-                      className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 transition-colors"
-                    >
-                      Max
-                    </button>
-                  </div>
-                  {wrapError && <p className="text-red-400">{wrapError}</p>}
-                  {wrapSuccess && (
-                    <p className="text-green-400">✓ {wrapSuccess}</p>
-                  )}
-                  <button
-                    type="button"
-                    disabled={wrapping || !address}
-                    onClick={
-                      wcfxPanelTab === 'wrap' ? handleWrap : handleUnwrap
-                    }
-                    className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-medium py-2 rounded-lg transition-colors text-sm"
-                  >
-                    {wrapping
-                      ? 'Waiting for confirmation…'
-                      : wcfxPanelTab === 'wrap'
-                        ? `Wrap ${wrapInput || '…'} CFX → wCFX`
-                        : `Unwrap ${unwrapInput || '…'} wCFX → CFX`}
-                  </button>
                 </div>
-              )}
+              </div>
             </div>
-          )}
 
-          <SwapArrow />
+            {/* Every N <unit> & Over N orders */}
+            <div className="mt-3 bg-slate-800/40 border border-slate-700/50 backdrop-blur-md rounded-2xl p-5 hover:border-slate-700 transition-colors flex flex-col sm:flex-row gap-6 relative z-10">
+              <div className="flex-1 flex flex-col justify-center">
+                <div className="flex items-center gap-1 mb-2">
+                  <span className="text-sm font-medium text-slate-300">Frequency</span>
+                  <span title="How often to execute a swap"><Info className="h-3.5 w-3.5 text-slate-500" /></span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    value={intervalValue}
+                    onChange={(e) => setIntervalValue(e.target.value)}
+                    className="w-20 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-conflux-500"
+                  />
+                  <select
+                    value={intervalUnit}
+                    onChange={(e) =>
+                      setIntervalUnit(e.target.value as typeof intervalUnit)
+                    }
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-conflux-500"
+                  >
+                    <option value="minutes">minutes</option>
+                    <option value="hours">hours</option>
+                    <option value="days">days</option>
+                    <option value="weeks">weeks</option>
+                  </select>
+                </div>
+              </div>
 
-          {/* Buy panel (tokenOut, no amount field) */}
-          <div className="bg-slate-800 rounded-2xl p-4 space-y-2">
-            <span className="text-sm text-slate-400">Buy</span>
-            <div className="flex items-center justify-end">
-              <div className="ml-auto flex flex-col items-end gap-1">
-                <TokenSelectButton
-                  tokens={mounted ? (tokenIn ? tokenOutOptions : tokens) : []}
-                  value={tokenOut}
-                  onChange={setTokenOut}
-                  loading={!mounted || poolsLoading}
-                  placeholder="Select token"
-                />
-                {tokenOutInfo && (
-                  <span className="text-xs text-slate-500">
-                    🪙 {outBalance}
+              <div className="w-px bg-slate-700/50 hidden sm:block"></div>
+              <div className="h-px bg-slate-700/50 sm:hidden block"></div>
+
+              <div className="flex-1 flex flex-col justify-center">
+                <div className="flex items-center gap-1 mb-2">
+                  <span className="text-sm font-medium text-slate-300">Order Count</span>
+                  <span title="Total number of swaps to execute"><Info className="h-3.5 w-3.5 text-slate-500" /></span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="1"
+                    value={totalSwaps}
+                    onChange={(e) => setTotalSwaps(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-conflux-500 pr-16"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">
+                    orders
                   </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Every N <unit> */}
-          <div className="mt-3 space-y-3">
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-sm text-slate-300 font-medium w-14">
-                Every
-              </span>
-              <span
-                title="How often to execute a swap"
-                className="text-slate-500 text-xs cursor-default"
-              >
-                ⓘ
-              </span>
-              <div className="flex gap-2 flex-1">
-                <input
-                  type="number"
-                  min="1"
-                  value={intervalValue}
-                  onChange={(e) => setIntervalValue(e.target.value)}
-                  className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-conflux-500"
-                />
-                <select
-                  value={intervalUnit}
-                  onChange={(e) =>
-                    setIntervalUnit(e.target.value as typeof intervalUnit)
-                  }
-                  className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-conflux-500"
-                >
-                  <option value="minutes">minutes</option>
-                  <option value="hours">hours</option>
-                  <option value="days">days</option>
-                  <option value="weeks">weeks</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Over N orders */}
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-sm text-slate-300 font-medium w-14">
-                Over
-              </span>
-              <span
-                title="Total number of swaps to execute"
-                className="text-slate-500 text-xs cursor-default"
-              >
-                ⓘ
-              </span>
-              <div className="relative flex-1">
-                <input
-                  type="number"
-                  min="1"
-                  value={totalSwaps}
-                  onChange={(e) => setTotalSwaps(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-conflux-500 pr-20"
-                />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none">
-                  Orders
-                </span>
+                </div>
               </div>
             </div>
 
             {/* Per-trade summary */}
-            <p className="text-sm text-slate-500 px-1">
-              {amountPerSwapNum > 0 ? (
-                <>
-                  {amountPerSwapNum.toLocaleString()}{' '}
-                  {tokenInInfo?.symbol ?? 'token'} per trade{' '}
-                  {priceLoading ? (
-                    <span className="animate-pulse text-slate-600">($…)</span>
-                  ) : perTradeUsd != null ? (
-                    `($${perTradeUsd})`
-                  ) : null}{' '}
-                  · {totalSwapsNum} orders
-                  {totalSwapsNum > 1 && (
-                    <>
-                      {' '}
-                      ·{' '}
-                      <span className="text-slate-400">
-                        total{' '}
-                        {(amountPerSwapNum * totalSwapsNum).toLocaleString()}{' '}
-                        {tokenInInfo?.symbol ?? 'token'}
-                      </span>
-                    </>
-                  )}
-                </>
-              ) : (
-                `0 ${tokenInInfo?.symbol ?? 'token'} per trade ($0)`
-              )}
-            </p>
-          </div>
-        </>
-      )}
-
-      {/* ── Slippage ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-1 pt-2">
-        <span className="text-xs text-slate-500">Slippage</span>
-        {['25', '50', '100'].map((bps) => (
-          <button
-            key={bps}
-            type="button"
-            onClick={() => setSlippage(bps)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-              slippage === bps
-                ? 'bg-conflux-700 text-white'
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-            }`}
-          >
-            {parseInt(bps, 10) / 100}%
-          </button>
-        ))}
-        <span className="ml-auto text-xs text-slate-500">
-          {parseInt(slippage, 10) / 100}%
-        </span>
-      </div>
-
-      {/* ── Approval amount ──────────────────────────────────────────────── */}
-      {tokenIn && (
-        <div className="flex items-center gap-2 px-1 pt-1">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={unlimitedApproval}
-              onChange={() => setUnlimitedApproval((v) => !v)}
-              className="sr-only"
-            />
-            <div
-              aria-hidden="true"
-              className={`w-8 h-4 rounded-full transition-colors relative ${
-                unlimitedApproval ? 'bg-conflux-600' : 'bg-slate-700'
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${
-                  unlimitedApproval ? 'translate-x-4' : 'translate-x-0.5'
-                }`}
-              />
+            <div className="mt-2 bg-slate-800/20 rounded-xl p-3 border border-slate-700/30">
+              <p className="text-xs text-slate-400 text-center">
+                {amountPerSwapNum > 0 ? (
+                  <>
+                    Executes <b>{totalSwapsNum}</b> {totalSwapsNum === 1 ? 'order' : 'orders'} of{' '}
+                    <b className="text-white">
+                      {amountPerSwapNum.toLocaleString()} {tokenInInfo?.symbol ?? 'token'}
+                    </b>
+                    {' '}per trade. Total allocation is{' '}
+                    <b>{(amountPerSwapNum * totalSwapsNum).toLocaleString()} {tokenInInfo?.symbol ?? 'token'}</b>.
+                  </>
+                ) : (
+                  `0 ${tokenInInfo?.symbol ?? 'token'} per trade`
+                )}
+              </p>
             </div>
-            <span className="text-xs text-slate-400">Unlimited approval</span>
-          </label>
-          <span className="text-xs text-slate-600 ml-1">
-            {unlimitedApproval
-              ? 'Approve once, reuse for future strategies'
-              : `Approve exact amount only`}
-          </span>
+          </>
+        )}
+
+        {/* ── Advanced Settings ────────────────────────────────────────────── */}
+        <div className="bg-slate-800/40 border border-slate-700/50 backdrop-blur-md rounded-2xl px-5 py-3 mt-4 hover:border-slate-700 transition-colors flex flex-col sm:flex-row items-center gap-4 justify-between">
+          {/* Slippage */}
+          <div className="flex items-center w-full justify-between sm:w-auto sm:justify-start gap-4">
+            <span className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+              Slippage
+              <span title="Slippage tolerance"><Info className="h-3.5 w-3.5 text-slate-500" /></span>
+            </span>
+            <div className="flex gap-1 bg-slate-900/50 p-1 rounded-lg border border-slate-700/50">
+              {['25', '50', '100'].map((bps) => (
+                <button
+                  key={bps}
+                  type="button"
+                  onClick={() => setSlippage(bps)}
+                  className={`px-3 py-1 rounded text-xs font-medium transition-all ${slippage === bps
+                    ? 'bg-conflux-500 text-white shadow-md shadow-conflux-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                    }`}
+                >
+                  {parseInt(bps, 10) / 100}%
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Approval amount */}
+          {tokenIn && (
+            <div className="flex items-center w-full justify-between sm:w-auto sm:justify-start gap-3">
+              <span className="text-sm font-medium text-slate-300 flex items-center gap-1.5">
+                Unlimited Auth
+                <span title="Approve exact amount or allow reuse for future strategies"><Info className="h-3.5 w-3.5 text-slate-500" /></span>
+              </span>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={unlimitedApproval}
+                  onChange={() => setUnlimitedApproval((v) => !v)}
+                  className="sr-only"
+                />
+                <div
+                  aria-hidden="true"
+                  className={`w-9 h-5 rounded-full transition-colors relative ${unlimitedApproval ? 'bg-conflux-500' : 'bg-slate-700'
+                    }`}
+                >
+                  <span
+                    className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${unlimitedApproval ? 'translate-x-4' : 'translate-x-0.5'
+                      }`}
+                  />
+                </div>
+              </label>
+            </div>
+          )}
         </div>
-      )}
 
-      {/* ── Error & submit ───────────────────────────────────────────────── */}
-      {error && (
-        <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300">
-          {error}
+        {/* ── Error & submit ───────────────────────────────────────────────── */}
+        {error && (
+          <div className="bg-red-950 border border-red-800 rounded-xl px-4 py-3 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={submitting || !mounted}
+          className="w-full bg-conflux-600 hover:bg-conflux-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-2xl transition-colors text-base mt-2"
+        >
+          {!mounted ? 'Loading…' : !address ? 'Connect wallet' : 'Create Strategy'}
+        </button>
+
+        {/* Disclaimer */}
+        <div className="flex gap-2 items-start text-xs text-slate-500 px-1 pt-1">
+          <span className="mt-0.5 shrink-0">▲</span>
+          <p>
+            {kind === 'limit_order'
+              ? 'Limit orders may not execute when the price is exactly at the target, due to gas costs and swap fees.'
+              : 'DCA orders execute at market price on each interval. Execution depends on the keeper being operational.'}
+          </p>
         </div>
-      )}
-
-      <button
-        type="submit"
-        disabled={submitting || !mounted}
-        className="w-full bg-conflux-600 hover:bg-conflux-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-2xl transition-colors text-base mt-2"
-      >
-        {!mounted ? 'Loading…' : !address ? 'Connect wallet' : 'Create Strategy'}
-      </button>
-
-      {/* Disclaimer */}
-      <div className="flex gap-2 items-start text-xs text-slate-500 px-1 pt-1">
-        <span className="mt-0.5 shrink-0">▲</span>
-        <p>
-          {kind === 'limit_order'
-            ? 'Limit orders may not execute when the price is exactly at the target, due to gas costs and swap fees.'
-            : 'DCA orders execute at market price on each interval. Execution depends on the keeper being operational.'}
-        </p>
-      </div>
-      </>)}
-    </form>
+      </>)
+      }
+    </form >
   );
 }
 
@@ -1737,11 +1425,11 @@ function TokenSelectButton({
   }
 
   return (
-    <div className="relative">
+    <div className="relative z-50">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 rounded-full px-3 py-1.5 text-sm font-semibold text-white transition-colors min-w-[100px] justify-between"
+        className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 rounded-full px-3 py-1.5 text-sm font-semibold text-white transition-colors min-w-[100px] justify-between z-10"
       >
         {selected ? (
           <>
@@ -1751,11 +1439,11 @@ function TokenSelectButton({
         ) : (
           <span className="text-slate-300">{placeholder}</span>
         )}
-        <span className="text-slate-400 text-xs">▾</span>
+        <ChevronDown className="h-4 w-4 text-slate-400" />
       </button>
 
       {open && (
-        <div className="absolute z-50 right-0 mt-1 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col max-h-72">
+        <div className="absolute z-[100] right-0 mt-1 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col max-h-72">
           <div className="p-2 border-b border-slate-700">
             <input
               type="text"
@@ -1780,11 +1468,10 @@ function TokenSelectButton({
                     setOpen(false);
                     setSearch('');
                   }}
-                  className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors ${
-                    t.address === value
-                      ? 'bg-conflux-800 text-white'
-                      : 'hover:bg-slate-800 text-slate-200'
-                  }`}
+                  className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 transition-colors ${t.address === value
+                    ? 'bg-conflux-800 text-white'
+                    : 'hover:bg-slate-800 text-slate-200'
+                    }`}
                 >
                   <TokenPill token={t} />
                   <div className="flex-1 min-w-0">
@@ -1860,18 +1547,17 @@ function AmountPanel({
   onMax?: () => void;
 }) {
   return (
-    <div className="bg-slate-800 rounded-2xl p-4 space-y-2">
-      <span className="text-sm text-slate-400">{label}</span>
-      <div className="flex items-center gap-3">
+    <div className="bg-slate-800/40 border border-slate-700/50 backdrop-blur-md rounded-2xl p-5 space-y-3 hover:border-slate-700 transition-colors relative z-30">
+      <span className="text-sm font-medium text-slate-400">{label}</span>
+      <div className="flex items-center gap-4">
         <input
           type="text"
           value={amount}
           onChange={(e) => !readOnly && onAmountChange(e.target.value)}
           readOnly={readOnly}
           placeholder="0.0"
-          className={`flex-1 bg-transparent text-3xl font-semibold placeholder-slate-600 focus:outline-none min-w-0 ${
-            readOnly ? 'text-slate-400 cursor-default' : 'text-white'
-          }`}
+          className={`flex-1 bg-transparent text-4xl tracking-tight font-semibold placeholder-slate-600 focus:outline-none min-w-0 ${readOnly ? 'text-slate-400 cursor-default' : 'text-white'
+            }`}
         />
         <TokenSelectButton
           tokens={tokens}
@@ -1881,24 +1567,24 @@ function AmountPanel({
           placeholder={placeholder}
         />
       </div>
-      <div className="flex items-center justify-between text-xs text-slate-500">
-        <span>
+      <div className="flex items-center justify-between text-sm text-slate-500 pt-1">
+        <span className="font-medium">
           {priceLoading ? (
             <span className="animate-pulse text-slate-600">…</span>
           ) : usdValue != null ? (
             `$${usdValue}`
           ) : null}
         </span>
-        <span className="flex items-center gap-1">
-          {balancesLoading && <span className="animate-pulse">…</span>}🪙{' '}
-          {balance}
+        <span className="flex items-center gap-1.5 font-medium">
+          {balancesLoading && <span className="animate-pulse">…</span>}
+          <span className="text-slate-400">Balance:</span> {balance}
           {onMax && !readOnly && (
             <button
               type="button"
               onClick={onMax}
-              className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-700 text-conflux-400 hover:bg-slate-600 hover:text-conflux-300 transition-colors"
+              className="ml-1 px-2 py-0.5 rounded text-xs font-bold bg-conflux-500/20 text-conflux-400 hover:bg-conflux-500/30 hover:text-conflux-300 transition-colors"
             >
-              Max
+              MAX
             </button>
           )}
         </span>
@@ -1914,11 +1600,10 @@ function SwapArrow({ onClick }: { onClick?: () => void }) {
       <button
         type="button"
         onClick={onClick}
-        className={`w-8 h-8 rounded-full bg-slate-700 border-2 border-slate-900 flex items-center justify-center text-slate-300 transition-colors ${
-          onClick ? 'hover:bg-slate-600 cursor-pointer' : 'cursor-default'
-        }`}
+        className={`w-8 h-8 rounded-full bg-slate-700 border-2 border-slate-900 flex items-center justify-center text-slate-300 transition-colors ${onClick ? 'hover:bg-slate-600 cursor-pointer' : 'cursor-default'
+          }`}
       >
-        ↓
+        <ArrowDown className="h-4 w-4" />
       </button>
     </div>
   );
@@ -1951,15 +1636,11 @@ function TxStepperPanel({
       <div className="flex flex-col items-center gap-3 text-center">
         {allDone ? (
           <div className="w-14 h-14 rounded-full bg-green-900/60 border border-green-600 flex items-center justify-center">
-            <svg className="w-7 h-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
+            <CheckCircle2 className="w-7 h-7 text-green-400" strokeWidth={2.5} />
           </div>
         ) : hasError ? (
           <div className="w-14 h-14 rounded-full bg-red-900/60 border border-red-600 flex items-center justify-center">
-            <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <XCircle className="w-7 h-7 text-red-400" strokeWidth={2.5} />
           </div>
         ) : (
           <div className="w-14 h-14 rounded-full border-4 border-conflux-500/30 border-t-conflux-500 animate-spin" />
@@ -1972,8 +1653,8 @@ function TxStepperPanel({
             {allDone
               ? 'Your strategy is live and will be monitored by the keeper.'
               : hasError
-              ? 'One of the steps failed. You can try again from the form.'
-              : 'Keep this tab open while transactions are processed.'}
+                ? 'One of the steps failed. You can try again from the form.'
+                : 'Keep this tab open while transactions are processed.'}
           </p>
         </div>
       </div>
@@ -1983,15 +1664,14 @@ function TxStepperPanel({
         {steps.map((step, i) => (
           <div
             key={step.id}
-            className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${
-              step.status === 'active' || step.status === 'waiting'
-                ? 'border-conflux-700 bg-conflux-950/40'
-                : step.status === 'done'
+            className={`flex items-start gap-3 p-3 rounded-xl border transition-colors ${step.status === 'active' || step.status === 'waiting'
+              ? 'border-conflux-700 bg-conflux-950/40'
+              : step.status === 'done'
                 ? 'border-green-800/50 bg-green-950/20'
                 : step.status === 'error'
-                ? 'border-red-800/60 bg-red-950/20'
-                : 'border-slate-800 bg-slate-900/20 opacity-60'
-            }`}
+                  ? 'border-red-800/60 bg-red-950/20'
+                  : 'border-slate-800 bg-slate-900/20 opacity-60'
+              }`}
           >
             {/* Status icon */}
             <div className="mt-0.5 shrink-0 w-6 h-6 flex items-center justify-center">
@@ -2026,12 +1706,11 @@ function TxStepperPanel({
 
             {/* Content */}
             <div className="flex-1 min-w-0">
-              <p className={`text-sm font-medium leading-tight ${
-                step.status === 'idle' || step.status === 'skipped' ? 'text-slate-500'
+              <p className={`text-sm font-medium leading-tight ${step.status === 'idle' || step.status === 'skipped' ? 'text-slate-500'
                 : step.status === 'done' ? 'text-green-300'
-                : step.status === 'error' ? 'text-red-300'
-                : 'text-white'
-              }`}>
+                  : step.status === 'error' ? 'text-red-300'
+                    : 'text-white'
+                }`}>
                 {step.label}
               </p>
               <p className={`text-xs mt-0.5 ${step.status === 'error' ? 'text-red-400' : 'text-slate-500'}`}>

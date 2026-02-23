@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
+import { Outfit, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { NavBar } from '@/components/shared/NavBar';
 import { WagmiProvider } from './providers';
+
+const outfit = Outfit({ subsets: ['latin'], variable: '--font-outfit' });
+const jbMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
 
 export const metadata: Metadata = {
   title: 'Conflux Automation Site',
@@ -14,11 +18,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-slate-900 text-slate-100">
+    <html lang="en" className={`${outfit.variable} ${jbMono.variable}`}>
+      <body className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-conflux-500/30">
         <WagmiProvider>
           <NavBar />
-          <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
+          <main className="mx-auto max-w-7xl px-4 py-8 md:py-12">{children}</main>
         </WagmiProvider>
       </body>
     </html>

@@ -4,11 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { injected, useAccount, useConnect } from 'wagmi';
 import { Dashboard } from '@/components/Dashboard/Dashboard';
 import { StrategyBuilder } from '@/components/StrategyBuilder/StrategyBuilder';
+import { WcfxWrapModal } from '@/components/StrategyBuilder/WcfxWrapModal';
 import {
   EXPECTED_CHAIN_NAME,
   useNetworkSwitch,
 } from '@/hooks/useNetworkSwitch';
 import { useAuthContext } from '@/lib/auth-context';
+import { Plus, RefreshCcw, X } from 'lucide-react';
 
 // ── Strategy modal ────────────────────────────────────────────────────────────
 
@@ -47,7 +49,7 @@ function StrategyModal({
       />
 
       {/* Centered modal panel */}
-      <div className="relative z-10 w-full max-w-lg max-h-[90vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl shadow-black/60 flex flex-col overflow-hidden animate-modal-in">
+      <div className="relative z-10 w-full max-w-xl max-h-[90vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl shadow-black/60 flex flex-col overflow-hidden animate-modal-in">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
           <h2 className="text-lg font-semibold text-white tracking-tight">
@@ -61,18 +63,7 @@ function StrategyModal({
             className={`p-1 rounded-lg transition-colors ${txInProgress ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             aria-label="Close"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                clipRule="evenodd"
-              />
-            </svg>
+            <X className="h-5 w-5" />
           </button>
         </div>
 
@@ -95,8 +86,11 @@ export default function HomePage() {
     useNetworkSwitch();
   const [mounted, setMounted] = useState(false);
   const [strategyOpen, setStrategyOpen] = useState(false);
+  const [wrapOpen, setWrapOpen] = useState(false);
   const openStrategy = useCallback(() => setStrategyOpen(true), []);
   const closeStrategy = useCallback(() => setStrategyOpen(false), []);
+  const openWrap = useCallback(() => setWrapOpen(true), []);
+  const closeWrap = useCallback(() => setWrapOpen(false), []);
 
   useEffect(() => setMounted(true), []);
 
@@ -106,22 +100,24 @@ export default function HomePage() {
   // ── Not connected ─────────────────────────────────────────────────────────
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[75vh] text-center gap-8">
-        <div className="space-y-4">
-          <h1 className="text-6xl font-bold text-white tracking-tight">
-            Conflux Automation
+      <div className="flex flex-col items-center justify-center min-h-[75vh] text-center gap-10">
+        <div className="space-y-6 relative">
+          <div className="absolute inset-0 bg-conflux-500/20 blur-[100px] -z-10 rounded-full" />
+          <h1 className="text-5xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 tracking-tight leading-tight">
+            Automate your <span className="text-transparent bg-clip-text bg-gradient-to-r from-conflux-400 to-blue-600">Conflux</span> De-Fi
           </h1>
-          <p className="text-xl text-slate-400 max-w-xl mx-auto leading-relaxed">
+          <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
             Non-custodial limit orders and DCA strategies on Conflux eSpace.
-            Your keys, your tokens — automated execution without custody.
+            Your keys, your tokens — executed automatically by decentralized keepers.
           </p>
         </div>
         <button
           type="button"
           onClick={() => connect({ connector: injected() })}
-          className="bg-conflux-600 hover:bg-conflux-700 text-white text-lg font-semibold py-4 px-12 rounded-xl transition-colors shadow-lg shadow-conflux-900/40"
+          className="group relative inline-flex items-center justify-center bg-conflux-600 hover:bg-conflux-500 text-white text-lg font-semibold py-4 px-10 rounded-2xl transition-all shadow-[0_0_40px_-10px_rgba(0,120,200,0.6)] hover:shadow-[0_0_60px_-15px_rgba(0,120,200,0.8)] overflow-hidden"
         >
-          Connect Wallet
+          <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer" />
+          <span className="relative">Connect Wallet to Start</span>
         </button>
       </div>
     );
@@ -177,26 +173,31 @@ export default function HomePage() {
   // ── Connected but signature was rejected ─────────────────────────────────
   if (!token) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[75vh] text-center gap-8">
-        <div className="space-y-3">
-          <h1 className="text-6xl font-bold text-white tracking-tight">
-            Conflux Automation
+      <div className="flex flex-col items-center justify-center min-h-[75vh] text-center gap-10">
+        <div className="space-y-4 relative">
+          <div className="absolute inset-0 bg-conflux-500/10 blur-[80px] -z-10 rounded-full" />
+          <h1 className="text-5xl md:text-6xl font-extrabold text-white tracking-tight">
+            Verify Ownership
           </h1>
-          <p className="text-xl text-slate-400 max-w-xl mx-auto leading-relaxed">
-            Sign the message in your wallet to verify ownership.
+          <p className="text-lg md:text-xl text-slate-400 max-w-xl mx-auto leading-relaxed">
+            Sign the message in your wallet to securely authenticate. This does not trigger any blockchain transaction or cost gas.
           </p>
-          <p className="text-xs text-slate-500 font-mono">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/60 border border-slate-700 rounded-full text-sm font-mono text-slate-300">
+            <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24] animate-pulse" />
             {address?.slice(0, 6)}…{address?.slice(-4)}
-          </p>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void login()}
-          className="bg-conflux-600 hover:bg-conflux-700 text-white text-lg font-semibold py-4 px-12 rounded-xl transition-colors shadow-lg shadow-conflux-900/40"
-        >
-          Sign In with Wallet
-        </button>
-        {error && <p className="text-red-400 text-sm max-w-sm">{error}</p>}
+        <div className="flex flex-col items-center gap-4">
+          <button
+            type="button"
+            onClick={() => void login()}
+            className="group relative inline-flex items-center justify-center bg-conflux-600 hover:bg-conflux-500 text-white text-lg font-semibold py-4 px-12 rounded-2xl transition-all shadow-[0_0_30px_-5px_rgba(0,120,200,0.5)] hover:shadow-[0_0_40px_-5px_rgba(0,120,200,0.7)] overflow-hidden"
+          >
+            <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer" />
+            <span className="relative text-white font-semibold">Sign In with Wallet</span>
+          </button>
+          {error && <p className="text-red-400 bg-red-950/40 border border-red-900/50 px-4 py-2 rounded-lg text-sm max-w-sm mt-2">{error}</p>}
+        </div>
       </div>
     );
   }
@@ -204,44 +205,42 @@ export default function HomePage() {
   // ── Signed in: history-first layout ──────────────────────────────────────
   return (
     <>
-      <div className="space-y-6">
+      <div className="space-y-4 mt-2">
         {/* ── Page header ── */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
-              My Strategies
-            </h2>
-            <p className="text-sm text-slate-500 mt-0.5">
-              Active and historical automation orders
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={openStrategy}
-            className="inline-flex items-center gap-2 bg-conflux-600 hover:bg-conflux-700 text-white font-semibold py-2.5 px-5 rounded-xl transition-colors shadow-md shadow-conflux-900/40 text-sm"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4"
-              viewBox="0 0 20 20"
-              fill="currentColor"
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-3">
+            My Strategies
+            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-xs font-medium border border-slate-700">
+              Active & Historical
+            </span>
+          </h2>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={openWrap}
+              className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-semibold py-2 px-4 rounded-xl transition-all shadow-sm text-sm"
             >
-              <path
-                fillRule="evenodd"
-                d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                clipRule="evenodd"
-              />
-            </svg>
-            New Strategy
-          </button>
+              <RefreshCcw className="h-4 w-4 text-conflux-400" />
+              Wrap wCFX
+            </button>
+            <button
+              type="button"
+              onClick={openStrategy}
+              className="inline-flex items-center gap-2 bg-conflux-600 hover:bg-conflux-500 text-white font-semibold py-2 px-4 rounded-xl transition-all shadow-md shadow-conflux-900/40 text-sm group"
+            >
+              <Plus className="h-4 w-4 group-hover:rotate-90 transition-transform" />
+              New Strategy
+            </button>
+          </div>
         </div>
 
         {/* ── Strategy history / table ── */}
         <Dashboard onCreateNew={openStrategy} />
       </div>
 
-      {/* ── Strategy builder slide-over ── */}
+      {/* ── Modals ── */}
       <StrategyModal open={strategyOpen} onClose={closeStrategy} />
+      <WcfxWrapModal open={wrapOpen} onClose={closeWrap} />
     </>
   );
 }

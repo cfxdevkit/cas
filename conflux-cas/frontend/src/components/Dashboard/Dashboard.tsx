@@ -10,6 +10,8 @@ import {
   AUTOMATION_MANAGER_ABI,
   AUTOMATION_MANAGER_ADDRESS,
 } from '@/lib/contracts';
+import { ClipboardList, Plus } from 'lucide-react';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 
 const CACHE_KEY = 'cas_pool_meta_v2';
 const POLL_MS = 30_000;
@@ -88,42 +90,46 @@ function fmtNext(ms: number): string {
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
-const STATUS_STYLES: Record<string, string> = {
-  pending: 'bg-yellow-900/50 text-yellow-400 border border-yellow-700',
-  active: 'bg-blue-900/50 text-blue-400 border border-blue-700',
-  executed: 'bg-green-900/50 text-green-400 border border-green-700',
-  cancelled: 'bg-slate-800 text-slate-500 border border-slate-700',
-  failed: 'bg-red-900/50 text-red-400 border border-red-700',
-  paused: 'bg-purple-900/50 text-purple-400 border border-purple-700',
+const STATUS_STYLES: Record<string, { dot: string; text: string }> = {
+  pending: { dot: 'bg-yellow-400', text: 'text-yellow-400' },
+  active: { dot: 'bg-blue-400', text: 'text-blue-400' },
+  executed: { dot: 'bg-green-400', text: 'text-green-400' },
+  cancelled: { dot: 'bg-slate-500', text: 'text-slate-400' },
+  failed: { dot: 'bg-red-500', text: 'text-red-400' },
+  paused: { dot: 'bg-purple-400', text: 'text-purple-400' },
 };
 
 const TERMINAL = new Set(['executed', 'cancelled', 'failed']);
 
+function StatusBadge({ status }: { status: string }) {
+  const norm = status.toLowerCase();
+  const s = STATUS_STYLES[norm] || { dot: 'bg-slate-400', text: 'text-slate-300' };
+
+  return (
+    <div className="flex items-center gap-2 font-medium w-24">
+      <div className={`w-2 h-2 rounded-full shrink-0 ${s.dot} shadow-[0_0_8px_currentColor]`} style={{ color: 'var(--tw-shadow-color)' }} />
+      <span className={`text-sm tracking-wide capitalize ${s.text}`}>{status}</span>
+    </div>
+  );
+}
+
 // ─── Mini token chip ──────────────────────────────────────────────────────────
 
-function TokenChip({
-  meta,
-  size = 'sm',
-}: {
-  meta?: TokenMeta;
-  size?: 'xs' | 'sm';
-}) {
-  const dim = size === 'xs' ? 'h-3.5 w-3.5' : 'h-4 w-4';
+function TokenChip({ meta, size = 'sm' }: { meta?: TokenMeta; size?: 'xs' | 'sm' }) {
+  const dim = size === 'xs' ? 'h-4 w-4' : 'h-5 w-5';
   return (
     <span className="inline-flex items-center gap-1.5">
       {meta?.logoURI ? (
         <img
           src={meta.logoURI}
           alt={meta.symbol}
-          className={`${dim} rounded-full bg-white ring-1 ring-slate-600 object-contain flex-shrink-0`}
+          className={`${dim} rounded-full bg-slate-800 ring-1 ring-slate-600/50 object-contain flex-shrink-0`}
           onError={(e) => {
             e.currentTarget.style.display = 'none';
           }}
         />
       ) : (
-        <span
-          className={`${dim} rounded-full bg-slate-700 ring-1 ring-slate-600 flex-shrink-0`}
-        />
+        <span className={`${dim} rounded-full bg-slate-700 ring-1 ring-slate-600/50 flex-shrink-0`} />
       )}
       <span className="font-semibold text-slate-200">
         {meta?.symbol ?? '?'}
@@ -185,6 +191,19 @@ function JobRow({
 
   const isTerminal = TERMINAL.has(job.status);
   const badgeCls = STATUS_STYLES[job.status] ?? STATUS_STYLES.failed;
+  const isLimit = job.type === 'limit_order';
+
+  const loTIn = isLimit ? (job as LimitOrderJob).params.tokenIn : undefined;
+  const loTOut = isLimit ? (job as LimitOrderJob).params.tokenOut : undefined;
+  const decIn = loTIn ? decimalsOf(loTIn, tokenCache) : 18;
+  const decOut = loTOut ? decimalsOf(loTOut, tokenCache) : 18;
+
+  const { swappiPrice, loading: priceLoading } = useTokenPrice(
+    isLimit && !isTerminal ? loTIn : undefined,
+    isLimit && !isTerminal ? loTOut : undefined,
+    decIn,
+    decOut
+  );
 
   const metaIn = tokenCache.get(
     (job.type === 'limit_order'
@@ -209,19 +228,40 @@ function JobRow({
     tokenOut = lo.params.tokenOut;
     amtIn = fmtAmt(lo.params.amountIn, decimalsOf(tokenIn, tokenCache));
     const isGte = lo.params.direction === 'gte';
-    const tgt = Number(
-      formatUnits(BigInt(lo.params.targetPrice), 18)
-    ).toPrecision(5);
+    const tgtRaw = Number(formatUnits(BigInt(lo.params.targetPrice), 18));
+    const tgt = tgtRaw.toPrecision(5);
+
+    let progressNode = null;
+    if (swappiPrice && !isTerminal) {
+      const current = parseFloat(swappiPrice);
+      if (current > 0 && tgtRaw > 0) {
+        const diffPct = Math.abs((tgtRaw - current) / tgtRaw) * 100;
+        progressNode = (
+          <span className="ml-2 text-[10px] text-slate-400 font-medium">
+            ({diffPct.toFixed(2)}% away)
+          </span>
+        );
+      }
+    } else if (priceLoading && !isTerminal) {
+      progressNode = (
+        <span className="ml-2 text-[10px] text-slate-500 animate-pulse">
+          (fetching…)
+        </span>
+      );
+    }
+
     targetCell = (
-      <span
-        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
-          isGte
+      <div className="flex items-center">
+        <span
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${isGte
             ? 'border-emerald-800/70 bg-emerald-950/40 text-emerald-300'
             : 'border-amber-800/70 bg-amber-950/40 text-amber-300'
-        }`}
-      >
-        {isGte ? '↑' : '↓'} {tgt} <TokenChip meta={metaOut} size="xs" />
-      </span>
+            }`}
+        >
+          {isGte ? '↑' : '↓'} {tgt} <TokenChip meta={metaOut} size="xs" />
+        </span>
+        {progressNode}
+      </div>
     );
   } else {
     const dca = job as DCAJob;
@@ -268,76 +308,61 @@ function JobRow({
   const _symOut = symOf(tokenOut, tokenCache);
 
   return (
-    <tr className="border-t border-slate-800 hover:bg-slate-800/30 transition-colors">
+    <tr className="border-[0.5px] border-slate-700/50 hover:border-slate-600 bg-slate-800/20 hover:bg-slate-800/60 transition-all rounded-xl relative group">
       {/* Status */}
-      <td className="px-3 py-3 whitespace-nowrap">
-        <span
-          className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeCls}`}
-        >
-          {job.status}
-        </span>
+      <td className="px-4 py-4 whitespace-nowrap first:rounded-l-xl">
+        <StatusBadge status={job.status} />
       </td>
       {/* Type */}
-      <td className="px-3 py-3 whitespace-nowrap text-xs text-slate-400 uppercase tracking-wide">
+      <td className="px-4 py-4 whitespace-nowrap text-xs font-semibold text-slate-300 uppercase tracking-wider">
         {job.type === 'limit_order' ? 'Limit' : 'DCA'}
       </td>
       {/* Pair — icon chips */}
-      <td className="px-3 py-3 whitespace-nowrap">
-        <span className="inline-flex items-center gap-1.5 text-sm">
+      <td className="px-4 py-4 whitespace-nowrap">
+        <span className="flex items-center gap-2 text-sm bg-slate-900/50 px-2.5 py-1.5 rounded-lg border border-slate-700/50 w-fit">
           <TokenChip meta={metaIn} />
-          <span className="text-slate-600">→</span>
+          <span className="text-slate-500 font-medium">→</span>
           <TokenChip meta={metaOut} />
         </span>
       </td>
       {/* Amount — icon + number */}
-      <td className="px-3 py-3 whitespace-nowrap">
-        <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1">
-          {metaIn?.logoURI ? (
-            <img
-              src={metaIn.logoURI}
-              alt={symIn}
-              className="h-3.5 w-3.5 rounded-full bg-white ring-1 ring-slate-600 object-contain flex-shrink-0"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          ) : (
-            <span className="h-3.5 w-3.5 rounded-full bg-slate-700 ring-1 ring-slate-600 flex-shrink-0" />
-          )}
-          <span className="text-sm font-mono font-semibold text-slate-100">
-            {amtIn}
-          </span>
-          <span className="text-xs text-slate-400">{symIn}</span>
+      <td className="px-4 py-4 whitespace-nowrap">
+        <span className="inline-flex items-center gap-1.5 font-medium text-slate-200 bg-slate-900/50 rounded-lg px-2.5 py-1 text-sm border border-slate-700/50">
+          <TokenChip meta={metaIn} size="xs" />
+          <span>{amtIn}</span>
+          <span className="text-xs text-slate-500">{symIn}</span>
         </span>
       </td>
       {/* Target / Progress */}
-      <td className="px-3 py-3 whitespace-nowrap text-xs">{targetCell}</td>
+      <td className="px-4 py-4 whitespace-nowrap text-xs text-slate-300">{targetCell}</td>
       {/* Retries */}
-      <td className="px-3 py-3 whitespace-nowrap text-xs text-slate-500 text-center">
+      <td className="px-4 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">
         {job.retries}/{job.maxRetries}
       </td>
       {/* Created */}
-      <td className="px-3 py-3 whitespace-nowrap text-xs text-slate-500">
+      <td className="px-4 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">
         {timeAgo(job.createdAt)}
       </td>
       {/* Actions */}
-      <td className="px-3 py-3 whitespace-nowrap text-xs">
-        <Link
-          href={`/job/${job.id}`}
-          className="text-conflux-400 hover:underline mr-3"
-        >
-          Details
-        </Link>
-        {!isTerminal && (
-          <button
-            type="button"
-            onClick={() => void handleCancel()}
-            disabled={cancelling}
-            className="text-red-500 hover:underline disabled:opacity-40"
+      <td className="px-4 py-4 whitespace-nowrap text-xs font-medium last:rounded-r-xl">
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/job/${job.id}`}
+            className="text-conflux-400 hover:text-conflux-300 transition-colors"
           >
-            {cancelling ? '…' : 'Cancel'}
-          </button>
-        )}
+            Details
+          </Link>
+          {!isTerminal && (
+            <button
+              type="button"
+              onClick={() => void handleCancel()}
+              disabled={cancelling}
+              className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+            >
+              {cancelling ? '…' : 'Cancel'}
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -443,40 +468,14 @@ export function Dashboard({ onCreateNew }: { onCreateNew?: () => void } = {}) {
 
   if (jobs.length === 0) {
     return (
-      <div className="text-center py-24 text-slate-500 space-y-4">
-        <div className="text-5xl">📋</div>
-        <p className="text-lg font-medium text-slate-400">No strategies yet</p>
-        <p className="text-sm text-slate-600">
-          Automate your first limit order or DCA strategy.
+      <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800/40 bg-slate-900/20 py-16 px-6 mt-6">
+        <div className="flex bg-slate-800/50 w-12 h-12 rounded-full items-center justify-center text-slate-500 mb-4">
+          <ClipboardList className="h-6 w-6" />
+        </div>
+        <h3 className="text-base font-semibold text-slate-300">No active strategies</h3>
+        <p className="text-sm text-slate-500 mt-1.5 max-w-sm text-center">
+          When you create automation orders like limit swaps or DCA strategies, they will appear here.
         </p>
-        {onCreateNew ? (
-          <button
-            type="button"
-            onClick={onCreateNew}
-            className="inline-flex items-center gap-2 mt-2 bg-conflux-600 hover:bg-conflux-700 text-white font-semibold py-2.5 px-6 rounded-xl transition-colors text-sm"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-4 w-4"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
-                clipRule="evenodd"
-              />
-            </svg>
-            New Strategy
-          </button>
-        ) : (
-          <Link
-            href="/create"
-            className="text-conflux-400 underline mt-2 inline-block"
-          >
-            Create one →
-          </Link>
-        )}
       </div>
     );
   }

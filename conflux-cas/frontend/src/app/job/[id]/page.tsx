@@ -260,9 +260,12 @@ export default function JobDetailPage() {
             takes a moment to confirm.
           </p>
           {job.lastError && (
-            <p className="mt-2 text-xs text-orange-400 font-mono bg-orange-900/40 rounded p-2 break-all">
-              Last error: {job.lastError}
-            </p>
+            <div className="mt-4 text-xs text-orange-400 bg-orange-900/40 rounded-lg p-3 max-h-48 overflow-y-auto">
+              <span className="font-semibold block mb-1">Last error:</span>
+              <pre className="whitespace-pre-wrap break-all font-mono leading-relaxed">
+                {job.lastError}
+              </pre>
+            </div>
           )}
         </div>
       )}
@@ -375,9 +378,12 @@ export default function JobDetailPage() {
         </div>
 
         {job.lastError && (
-          <p className="text-xs text-red-400 bg-red-950 border border-red-900 rounded p-2">
-            Last error: {job.lastError}
-          </p>
+          <div className="mt-4 text-xs text-red-400 bg-red-950 border border-red-900 rounded-lg p-3 max-h-48 overflow-y-auto">
+            <span className="font-semibold block mb-1">Last error:</span>
+            <pre className="whitespace-pre-wrap break-all font-mono leading-relaxed">
+              {job.lastError}
+            </pre>
+          </div>
         )}
       </section>
 
@@ -626,11 +632,10 @@ function TriggerRow({ direction }: { direction: string }) {
       <span className={LABEL_CLS}>Trigger</span>
       <div className={VAL_COL}>
         <div
-          className={`${CHIP_CLS} ${
-            isGte
-              ? 'border-emerald-800/70 bg-emerald-950/40'
-              : 'border-amber-800/70 bg-amber-950/40'
-          }`}
+          className={`${CHIP_CLS} ${isGte
+            ? 'border-emerald-800/70 bg-emerald-950/40'
+            : 'border-amber-800/70 bg-amber-950/40'
+            }`}
         >
           <span
             className={`text-base leading-none ${isGte ? 'text-emerald-400' : 'text-amber-400'}`}
