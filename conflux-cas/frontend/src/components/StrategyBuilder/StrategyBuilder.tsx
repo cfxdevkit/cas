@@ -540,7 +540,8 @@ export function StrategyBuilder({
             headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
           if (jobsRes.ok) {
-            const existingJobs = (await jobsRes.json()) as Job[];
+            const payload = (await jobsRes.json()) as { jobs: Job[] };
+            const existingJobs = Array.isArray(payload.jobs) ? payload.jobs : [];
             for (const j of existingJobs) {
               if (TERMINAL_STATUSES.has(j.status)) continue;
               const jTokenIn =

@@ -6,6 +6,7 @@ import {
   type Config,
   createConfig,
   http,
+  injected,
   WagmiProvider as WagmiProviderBase,
 } from 'wagmi';
 import { AuthProvider } from '@/lib/auth-context';
@@ -35,6 +36,11 @@ const espaceMainnet = {
 
 export const wagmiConfig: Config = createConfig({
   chains: [espaceTestnet, espaceMainnet],
+  // Register the injected (MetaMask, Fluent, etc.) connector so wagmi can
+  // automatically reconnect it on page refresh without requiring a new
+  // connect() call.  Without this, wagmi's persisted connection finds no
+  // matching connector and drops the session, forcing a re-sign every time.
+  connectors: [injected()],
   // Poll every 30 s for block updates. This is the global default for all wagmi
   // hooks (useBalance, block subscriptions, etc.). 2 s was causing 30+ RPC calls
   // per minute and burning the testnet quota quickly.
