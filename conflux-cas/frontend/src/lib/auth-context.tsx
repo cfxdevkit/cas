@@ -111,22 +111,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Guard: tracks the address that triggered the latest auto-signed attempt so
   // we don't fire login() repeatedly if the effect re-runs (e.g. StrictMode).
   const autoSignedForRef = useRef<string | null>(null);
+  // Track the previous non-null address so we can detect a wallet switch.
+  const prevAddressRef = useRef<string | null>(null);
 
-  // ── Clear token when wallet disconnects or address changes ────────────────
-  // Skip clearing the token on the initial client mount. Without this guard
-  // a brief period where `address` is null (while wagmi reconnects) would
-  // cause the stored JWT to be removed and force the user to re-sign.
+  // ── Clear token when the wallet SWITCHES to a different address ─────────────
+  // We do NOT clear on address → undefined (transient disconnect / wagmi
+  // re-initialise) because that would force re-sign on every page navigation
+  // or tab switch where wagmi briefly loses the account before reconnecting.
+  // Token expiry and explicit logouts are handled separately.
   const mountedRef = useRef(false);
   useEffect(() => {
     if (!mountedRef.current) {
       mountedRef.current = true;
+      if (address) prevAddressRef.current = address;
       return;
     }
-    if (!address) {
-      setToken(null);
-      localStorage.removeItem(TOKEN_KEY);
-      autoSignedForRef.current = null;
+    if (address) {
+      // Address became known or changed.
+      if (prevAddressRef.current && prevAddressRef.current !== address) {
+        // Different wallet connected — previous session is invalid.
+        setToken(null);
+        localStorage.removeItem(TOKEN_KEY);
+        autoSignedForRef.current = null;
+      }
+      prevAddressRef.current = address;
     }
+    // When address becomes undefined we intentionally do nothing:
+    // the token stays so the user doesn't have to re-sign after a brief
+    // wagmi reconnect cycle or a Next.js client-side navigation.
   }, [address]);
 
   // ── Core login function ───────────────────────────────────────────────────

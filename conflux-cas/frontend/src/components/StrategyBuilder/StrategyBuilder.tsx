@@ -364,9 +364,49 @@ export function StrategyBuilder({
     tokenInDecimals,
   ]);
   const wcfxBalWei = BigInt(wcfxInfo?.balanceWei ?? '0');
+
+  // Sum wCFX already committed by active jobs so the UI preview reflects the
+  // true shortfall (same logic the approval step uses at submit-time).
+  const [cfxExistingCommitted, setCfxExistingCommitted] = useState(0n);
+  useEffect(() => {
+    if (!tokenInIsCfx || !token) {
+      setCfxExistingCommitted(0n);
+      return;
+    }
+    const TERMINAL = new Set(['executed', 'cancelled', 'failed']);
+    fetch('/api/jobs', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : { jobs: [] }))
+      .then((p: { jobs: Job[] }) => {
+        let committed = 0n;
+        for (const j of Array.isArray(p.jobs) ? p.jobs : []) {
+          if (TERMINAL.has(j.status)) continue;
+          const jTin =
+            j.type === 'limit_order'
+              ? (j as LimitOrderJob).params.tokenIn
+              : (j as DCAJob).params.tokenIn;
+          if (jTin.toLowerCase() !== wcfxAddr.toLowerCase()) continue;
+          if (j.type === 'limit_order') {
+            committed += BigInt((j as LimitOrderJob).params.amountIn);
+          } else {
+            const dca = j as DCAJob;
+            committed +=
+              BigInt(dca.params.amountPerSwap) *
+              BigInt(Math.max(0, dca.params.totalSwaps - dca.params.swapsCompleted));
+          }
+        }
+        setCfxExistingCommitted(committed);
+      })
+      .catch(() => setCfxExistingCommitted(0n));
+  }, [tokenInIsCfx, token, wcfxAddr]);
+
+  // Must cover both the new strategy AND what existing active jobs still need.
   const needsAutoWrap =
-    tokenInIsCfx && requiredPreview > wcfxBalWei && requiredPreview > 0n;
-  const autoWrapAmount = needsAutoWrap ? requiredPreview - wcfxBalWei : 0n;
+    tokenInIsCfx &&
+    requiredPreview + cfxExistingCommitted > wcfxBalWei &&
+    requiredPreview > 0n;
+  const autoWrapAmount = needsAutoWrap
+    ? requiredPreview + cfxExistingCommitted - wcfxBalWei
+    : 0n;
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -391,6 +431,33 @@ export function StrategyBuilder({
       setError('Wallet client not ready — please reload.');
       setSubmitting(false);
       return;
+    }
+
+    // ── Pre-flight: ensure amounts are non-zero before touching the chain ────────
+    if (kind === 'dca') {
+      // Guard against accidentally submitting a year-long (or longer) interval.
+      // maxJobsPerUser slots are finite; a stuck job blocks the user indefinitely.
+      const MAX_INTERVAL_SECS = 30 * 86_400; // 30 days
+      if (intervalSeconds > MAX_INTERVAL_SECS) {
+        setError(
+          `Interval too long (${Math.round(intervalSeconds / 86400)} days). Maximum is 30 days.`
+        );
+        setSubmitting(false);
+        return;
+      }
+    }
+    if (kind === 'limit_order') {
+      if (!amountIn.trim() || parseFloat(amountIn) <= 0) {
+        setError('Enter a sell amount greater than zero.');
+        setSubmitting(false);
+        return;
+      }
+    } else {
+      if (!amountPerSwap.trim() || parseFloat(amountPerSwap) <= 0) {
+        setError('Enter an amount per swap greater than zero.');
+        setSubmitting(false);
+        return;
+      }
     }
 
     let activeStepId: TxStepId = 'wrap'; // tracks current step for error attribution
@@ -437,7 +504,47 @@ export function StrategyBuilder({
       const tokenInIsNative =
         tokenIn.toLowerCase() === CFX_NATIVE_ADDRESS.toLowerCase();
 
-      // ── 0. Check wCFX balance to determine if wrap step is needed ────────
+      // ── 0. Pre-fetch active jobs once — used by both wrap and approve steps ──
+      // The wrap shortfall and the required approval must both cover the new
+      // strategy PLUS the remaining committed amounts of all active jobs for the
+      // same token-in, so we fetch jobs here and reuse the result below.
+      const TERMINAL_STATUSES = new Set(['executed', 'cancelled', 'failed']);
+      let existingCommitted = 0n;
+      try {
+        const jobsRes = await fetch('/api/jobs', {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (jobsRes.ok) {
+          const payload = (await jobsRes.json()) as { jobs: Job[] };
+          const existingJobs = Array.isArray(payload.jobs) ? payload.jobs : [];
+          for (const j of existingJobs) {
+            if (TERMINAL_STATUSES.has(j.status)) continue;
+            const jTokenIn =
+              j.type === 'limit_order'
+                ? (j as LimitOrderJob).params.tokenIn
+                : (j as DCAJob).params.tokenIn;
+            if (jTokenIn.toLowerCase() !== resolvedTokenIn.toLowerCase())
+              continue;
+            if (j.type === 'limit_order') {
+              existingCommitted += BigInt(
+                (j as LimitOrderJob).params.amountIn
+              );
+            } else {
+              const dca = j as DCAJob;
+              const remaining = Math.max(
+                0,
+                dca.params.totalSwaps - dca.params.swapsCompleted
+              );
+              existingCommitted +=
+                BigInt(dca.params.amountPerSwap) * BigInt(remaining);
+            }
+          }
+        }
+      } catch {
+        // Non-fatal — fall back to checking only the new strategy's amount.
+      }
+
+      // ── 0b. Check wCFX balance to determine if wrap step is needed ────────
       let needsWrap = false;
       let wcfxBal = 0n;
       if (tokenInIsNative && requiredAllowance > 0n) {
@@ -447,7 +554,8 @@ export function StrategyBuilder({
           functionName: 'balanceOf',
           args: [address],
         })) as bigint;
-        if (wcfxBal < requiredAllowance) {
+        // Must cover the new strategy AND what existing active strategies still need.
+        if (wcfxBal < existingCommitted + requiredAllowance) {
           needsWrap = true;
         }
       }
@@ -490,7 +598,7 @@ export function StrategyBuilder({
 
       // ── 1. Auto-wrap CFX → wCFX if WCFX balance is insufficient ──────────
       if (needsWrap) {
-        const shortfall = requiredAllowance - wcfxBal;
+        const shortfall = existingCommitted + requiredAllowance - wcfxBal;
         const shortfallFmt = parseFloat(formatUnits(shortfall, 18)).toFixed(6);
         setStep('wrap', 'active', `Wrapping ${shortfallFmt} CFX → wCFX…`);
         const wrapGas = await publicClient.estimateContractGas({
@@ -529,46 +637,7 @@ export function StrategyBuilder({
           args: [address, AUTOMATION_MANAGER_ADDRESS],
         })) as bigint;
 
-        // ── Sum up allowance already committed by existing active strategies ──
-        // Each active job for the same tokenIn "consumes" part of the approved
-        // allowance when it executes.  We must ensure the on-chain allowance
-        // covers ALL outstanding strategies, not just this new one.
-        const TERMINAL_STATUSES = new Set(['executed', 'cancelled', 'failed']);
-        let existingCommitted = 0n;
-        try {
-          const jobsRes = await fetch('/api/jobs', {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          });
-          if (jobsRes.ok) {
-            const payload = (await jobsRes.json()) as { jobs: Job[] };
-            const existingJobs = Array.isArray(payload.jobs) ? payload.jobs : [];
-            for (const j of existingJobs) {
-              if (TERMINAL_STATUSES.has(j.status)) continue;
-              const jTokenIn =
-                j.type === 'limit_order'
-                  ? (j as LimitOrderJob).params.tokenIn
-                  : (j as DCAJob).params.tokenIn;
-              if (jTokenIn.toLowerCase() !== resolvedTokenIn.toLowerCase())
-                continue;
-              if (j.type === 'limit_order') {
-                existingCommitted += BigInt(
-                  (j as LimitOrderJob).params.amountIn
-                );
-              } else {
-                const dca = j as DCAJob;
-                const remaining = Math.max(
-                  0,
-                  dca.params.totalSwaps - dca.params.swapsCompleted
-                );
-                existingCommitted +=
-                  BigInt(dca.params.amountPerSwap) * BigInt(remaining);
-              }
-            }
-          }
-        } catch {
-          // Non-fatal — fall back to checking only the new strategy's amount.
-        }
-
+        // ── existingCommitted already computed above (step 0 pre-fetch) ─────
         // Total allowance this account needs: new strategy + all active ones.
         const totalRequired = existingCommitted + requiredAllowance;
 
@@ -1673,10 +1742,8 @@ function TokenSelectButton({
                 >
                   <TokenPill token={t} />
                   <div className="flex-1 min-w-0">
-                    <span className="font-semibold">{t.symbol}</span>
-                    <span className="ml-1.5 text-slate-400 text-xs truncate">
-                      {t.name}
-                    </span>
+                    <p className="font-semibold leading-none truncate">{t.symbol}</p>
+                    <p className="text-slate-400 text-xs truncate">{t.name}</p>
                   </div>
                   {parseFloat(t.balanceFormatted) > 0 && (
                     <span className="text-green-400 text-xs shrink-0">

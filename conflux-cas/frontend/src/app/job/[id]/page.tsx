@@ -2,16 +2,10 @@
 
 import type { Job } from '@conflux-cas/shared';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { formatUnits } from 'viem';
-import { usePublicClient, useWriteContract } from 'wagmi';
 import { useAuthContext } from '@/lib/auth-context';
-import {
-  AUTOMATION_MANAGER_ABI,
-  AUTOMATION_MANAGER_ADDRESS,
-} from '@/lib/contracts';
-import { parseError } from '@/lib/utils';
 
 const CACHE_KEY = 'cas_pool_meta_v2';
 
@@ -104,17 +98,12 @@ function explorerAddress(address: string) {
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [job, setJob] = useState<Job | null>(null);
   const [execList, setExecList] = useState<ExecutionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
   const { token } = useAuthContext();
-  const { writeContractAsync } = useWriteContract();
-  const publicClient = usePublicClient();
   const [tokenCache] = useState<Map<string, TokenMeta>>(() => loadTokenCache());
 
   useEffect(() => {
@@ -139,53 +128,6 @@ export default function JobDetailPage() {
       .finally(() => setLoading(false));
   }, [id, token]);
 
-  async function handleCancel() {
-    if (!job) return;
-    setCancelling(true);
-    setCancelError(null);
-    try {
-      // If the job has an on-chain ID, cancel it on the contract first.
-      // This is required for failed jobs that are still ACTIVE on-chain.
-      if (job.onChainJobId && publicClient) {
-        try {
-          const hash = await writeContractAsync({
-            address: AUTOMATION_MANAGER_ADDRESS,
-            abi: AUTOMATION_MANAGER_ABI,
-            functionName: 'cancelJob',
-            args: [job.onChainJobId as `0x${string}`],
-          });
-          await publicClient.waitForTransactionReceipt({ hash });
-        } catch (onChainErr: unknown) {
-          const msg = (onChainErr as Error)?.message ?? '';
-          // JobNotActive means it was already closed on-chain (executed/expired).
-          // In that case proceed to clean up the DB record anyway.
-          if (
-            !msg.includes('JobNotActive') &&
-            !msg.includes('user rejected') &&
-            !msg.includes('User rejected')
-          ) {
-            throw onChainErr;
-          }
-        }
-      }
-
-      // Update DB status via backend.
-      const res = await fetch(`/api/jobs/${job.id}`, {
-        method: 'DELETE',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (res.ok) {
-        router.push('/dashboard');
-      } else {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${res.status}`);
-      }
-    } catch (err: unknown) {
-      setCancelError(parseError(err));
-      setCancelling(false);
-    }
-  }
-
   if (loading) {
     return (
       <div className="mx-auto w-full max-w-5xl space-y-4 animate-pulse">
@@ -208,8 +150,6 @@ export default function JobDetailPage() {
   }
 
   const isActive = job.status === 'active' || job.status === 'pending';
-  const isCancellable =
-    isActive || job.status === 'failed' || job.status === 'paused';
   const retriesExhausted = isActive && job.retries >= job.maxRetries;
   const statusCls =
     STATUS_COLORS[job.status] ?? 'bg-slate-700 text-slate-400 border-slate-600';
@@ -226,23 +166,6 @@ export default function JobDetailPage() {
         >
           ← Dashboard
         </Link>
-        {isCancellable && (
-          <div className="flex flex-col items-end gap-1">
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={cancelling}
-              className="text-sm text-red-400 hover:text-red-300 disabled:opacity-50 border border-red-800 hover:border-red-600 px-4 py-1.5 rounded-lg transition-colors"
-            >
-              {cancelling ? 'Cancelling…' : 'Cancel Strategy'}
-            </button>
-            {cancelError && (
-              <p className="text-xs text-red-400 max-w-xs text-right">
-                {cancelError}
-              </p>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Retry-exhaustion warning banner */}

@@ -93,8 +93,13 @@ export class PriceChecker {
 
   async checkDCA(job: Job & { type: 'dca' }): Promise<PriceCheckResult> {
     const params = job.params;
-    // DCA has no price condition — just verify the interval has been reached
-    const conditionMet = Date.now() >= params.nextExecution;
+    // DCA has no price condition — just verify the interval has been reached.
+    // We add a 15-second buffer before declaring conditionMet so that by the
+    // time the transaction is mined the on-chain block.timestamp is also
+    // reliably past nextExecution, avoiding DCAIntervalNotReached reverts at
+    // the execution boundary.
+    const DCA_EXECUTION_BUFFER_MS = 15_000;
+    const conditionMet = Date.now() >= params.nextExecution + DCA_EXECUTION_BUFFER_MS;
     const currentPrice = await this.source.getPrice(
       params.tokenIn,
       params.tokenOut

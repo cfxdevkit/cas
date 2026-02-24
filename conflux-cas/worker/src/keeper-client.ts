@@ -305,8 +305,32 @@ export class KeeperClientImpl implements IKeeperClient {
     jobId: string,
     owner: string,
     params: DCAJob['params']
-  ): Promise<{ txHash: string; amountOut: string | null }> {
+  ): Promise<{ txHash: string; amountOut: string | null; nextExecutionSec: number }> {
     await this.preflightCheck();
+
+    // ── On-chain preflight: verify the DCA interval has actually been reached ──
+    // The DB's nextExecution may be in wrong units (ms vs seconds) or stale.
+    // The contract is authoritative — check before simulating to avoid wasting
+    // gas and to surface a clean early error instead of a revert.
+    const onChainParams = (await this.publicClient.readContract({
+      address: this.contractAddress,
+      abi: AUTOMATION_MANAGER_ABI,
+      functionName: 'getDCAJob',
+      args: [jobId as `0x${string}`],
+    })) as {
+      intervalSeconds: bigint;
+      nextExecution: bigint;
+      swapsCompleted: bigint;
+      totalSwaps: bigint;
+    };
+    const nowSec = BigInt(Math.floor(Date.now() / 1000));
+    if (nowSec < onChainParams.nextExecution) {
+      throw new Error(
+        `DCAIntervalNotReached(${onChainParams.nextExecution}) — on-chain interval not reached yet ` +
+          `(now=${nowSec}, next=${onChainParams.nextExecution}, ` +
+          `remaining=${onChainParams.nextExecution - nowSec}s)`
+      );
+    }
 
     const amountPerTick = BigInt(params.amountPerSwap);
     // For DCA, minAmountOut is calculated with a conservative 1% slippage applied
@@ -379,10 +403,25 @@ export class KeeperClientImpl implements IKeeperClient {
     }
 
     const amountOut = decodeAmountOut(receipt.logs, owner as Address);
+    // Re-read the contract's nextExecution after the tick so the DB is exactly
+    // in sync with what the contract stored (block.timestamp_at_execution + intervalSeconds).
+    // This avoids the wall-clock vs chain-clock skew that causes premature retries.
+    const postTickParams = (await this.publicClient.readContract({
+      address: this.contractAddress,
+      abi: AUTOMATION_MANAGER_ABI,
+      functionName: 'getDCAJob',
+      args: [jobId as `0x${string}`],
+    })) as {
+      intervalSeconds: bigint;
+      nextExecution: bigint;
+      swapsCompleted: bigint;
+      totalSwaps: bigint;
+    };
+    const nextExecutionSec = Number(postTickParams.nextExecution);
     logger.info(
-      { jobId, hash, blockNumber: receipt.blockNumber.toString(), amountOut },
+      { jobId, hash, blockNumber: receipt.blockNumber.toString(), amountOut, nextExecutionSec },
       '[KeeperClient] dca confirmed'
     );
-    return { txHash: hash, amountOut };
+    return { txHash: hash, amountOut, nextExecutionSec };
   }
 }

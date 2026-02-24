@@ -16,7 +16,7 @@ export interface KeeperClient {
     jobId: string,
     owner: string,
     params: DCAJob['params']
-  ): Promise<{ txHash: string; amountOut?: string | null }>;
+  ): Promise<{ txHash: string; amountOut?: string | null; nextExecutionSec: number }>;
 
   /** Read the terminal status of a job from the contract. */
   getOnChainStatus(
@@ -117,22 +117,43 @@ export class Executor {
       // PriceConditionNotMet is a transient race: the off-chain check passed but
       // the on-chain oracle ticked back before the tx was mined.  Don't mark the
       // job permanently failed — it will be re-evaluated on the next poller tick.
+      // IMPORTANT: do NOT call incrementRetry here — this is an expected scenario,
+      // not a real failure, and burning retries would eventually mark the job failed.
       if (message.includes('PriceConditionNotMet')) {
         logger.debug(
           `[Executor] job ${job.id}: price condition no longer met at execution time — will retry next tick`
         );
-        await this.jobStore.incrementRetry(job.id);
-        await this.jobStore.updateLastError(job.id, message);
         return;
       }
 
-      // DCAIntervalNotReached is similarly transient (timing edge case).
+      // DCAIntervalNotReached means the on-chain interval timer hasn't elapsed yet.
+      // This can happen when:
+      //   a) The DB's nextExecution (ms) and the contract's nextExecution (seconds)
+      //      are slightly out of sync after a crash/restart.
+      //   b) The tx was submitted right at the boundary and the block timestamp
+      //      hadn't advanced enough by the time it was mined.
+      // Either way this is transient — the interval WILL be reached eventually.
+      // Do NOT increment retries: doing so would eventually exhaust maxRetries
+      // and permanently fail a job that is simply waiting for its next window.
       if (message.includes('DCAIntervalNotReached')) {
         logger.debug(
           `[Executor] job ${job.id}: DCA interval not yet reached at execution time — will retry next tick`
         );
-        await this.jobStore.incrementRetry(job.id);
-        await this.jobStore.updateLastError(job.id, message);
+        return;
+      }
+
+      // Receipt-not-found: the node didn't have the receipt indexed yet when
+      // waitForTransactionReceipt polled. The tx was almost certainly mined —
+      // the next poller tick will either see the updated DB state (if the tx
+      // succeeded and markDCATick ran) or try again. Don't record as an error
+      // and don't burn a retry.
+      if (
+        message.includes('could not be found') ||
+        message.includes('TransactionReceiptNotFoundError')
+      ) {
+        logger.debug(
+          `[Executor] job ${job.id}: receipt not yet indexed — will retry next tick`
+        );
         return;
       }
 
@@ -347,19 +368,23 @@ export class Executor {
       );
       return;
     }
-    const { txHash, amountOut } = await this.keeperClient.executeDCATick(
+    const { txHash, amountOut, nextExecutionSec } = await this.keeperClient.executeDCATick(
       onChainJobId,
       job.owner,
       job.params
     );
 
     const newSwapsCompleted = job.params.swapsCompleted + 1;
-    const nextExecution = Date.now() + job.params.intervalSeconds * 1000;
+    // Use the on-chain nextExecution (returned by KeeperClient after reading
+    // the contract state post-tick) rather than computing it locally.
+    // This keeps the DB in sync with contract state regardless of any
+    // intervalSeconds or clock discrepancies.
+    const nextExecutionMs = nextExecutionSec * 1000;
     await this.jobStore.markDCATick(
       job.id,
       txHash,
       newSwapsCompleted,
-      nextExecution,
+      nextExecutionMs,
       amountOut
     );
 
