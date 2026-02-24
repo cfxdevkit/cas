@@ -147,6 +147,23 @@ pnpm run dev:worker
 
 ---
 
+## Recent changes (developer notes)
+
+- Persist JWT across page refreshes: `AuthProvider` now avoids clearing the stored
+  JWT on initial client mount so users remain signed in when the page reloads.
+- Worker price-check improvements:
+  - Defensive `factory.getPair` check before calling `getAmountsOut` to surface
+    clear "no pool" errors when a pair doesn't exist.
+  - Swappi price normalization: prices are now returned scaled to 1e18 using
+    token decimals so comparisons with 1e18-scaled `targetPrice` values are
+    correct (fixes mismatches for tokens with non-18 decimals such as USDT).
+  - Executor logs execution-time `currentPrice`/`targetPrice` for debugging.
+
+These fixes are in `worker/src/main.ts` and `frontend/src/lib/auth-context.tsx`.
+
+
+---
+
 ## User Flow
 
 ```

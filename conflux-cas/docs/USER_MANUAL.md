@@ -290,3 +290,21 @@ If execution fails (e.g. gas spike, RPC timeout):
 | Trade fails with `failed` status | Check token allowance — you must `approve()` the AutomationManager before execution |
 | Safety toggle has no effect | You must be signed in with a valid JWT |
 | "Wrapping CFX → wCFX" step appears during create | Expected — the app wraps the shortfall automatically when native CFX is Token In |
+
+---
+
+## Operator: Build & Deploy (Docker Compose)
+
+Operators and maintainers can follow the full build & deploy guide in the repository root: [DEPLOY.md](../../DEPLOY.md).
+
+Quick summary:
+
+- Build multi-arch images with `docker buildx build --platform linux/amd64,linux/arm64 --file <service>/Dockerfile --tag ghcr.io/<org>/name:tag --push <service-dir>`.
+- On the host, copy `.env.example` to `.env`, populate `JWT_SECRET`, `EXECUTOR_PRIVATE_KEY`, and `AUTOMATION_MANAGER_ADDRESS`, then `docker compose pull && docker compose up -d --force-recreate`.
+- Use `docker compose logs -f worker` to inspect worker runtime output (price checks, execution logs).
+
+Recent dev fixes to be aware of:
+
+- `AuthProvider` now preserves the JWT on initial mount to avoid forced re-signs on page refresh.
+- The worker now validates that a Swappi pair exists before calling `getAmountsOut` and normalizes prices to a 1e18 scale using token decimals (fixes comparisons against `targetPrice`).
+- Executor now logs `currentPrice` and `targetPrice` at execution time for better debugging.

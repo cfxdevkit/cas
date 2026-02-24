@@ -30,7 +30,7 @@ FROM deps AS builder
 WORKDIR /repos
 COPY conflux-sdk ./conflux-sdk
 COPY conflux-cas/shared   ./conflux-cas/shared
-COPY conflux-cas/contracts ./conflux-cas/contracts
+COPY conflux-contracts ./conflux-contracts
 COPY conflux-cas/backend   ./conflux-cas/backend
 COPY conflux-cas/tsconfig.base.json ./conflux-cas/tsconfig.base.json
 
