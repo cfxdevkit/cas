@@ -51,9 +51,6 @@ export interface JobStore {
   markExpired(jobId: string): Promise<void>;
   /** Mark a job cancelled — use when on-chain status is CANCELLED. */
   markCancelled(jobId: string): Promise<void>;
-  /** Update only the last_error field without changing status — used for
-   *  transient errors that should be visible to the user in the Dashboard. */
-  updateLastError(jobId: string, error: string): Promise<void>;
 }
 
 export interface ExecutorOptions {
@@ -113,41 +110,34 @@ export class Executor {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
 
-      // ── Transient errors ─────────────────────────────────────────────────────
-
-      const handleTransientError = async (hint: string) => {
-        logger.info({ jobId: job.id }, `[Executor] job ${job.id}: ${hint}`);
-
-        // Always increment the retry counter so the UI correctly reflects the attempt
-        await this.jobStore.incrementRetry(job.id);
-        const nextRetries = job.retries + 1;
-
-        if (nextRetries >= job.maxRetries) {
-          logger.warn({ jobId: job.id }, `[Executor] job ${job.id} reached max retries (${job.maxRetries}) on transient error`);
-          await this.jobStore.markFailed(job.id, hint);
-        } else {
-          await this.jobStore.updateLastError(job.id, hint);
-        }
-      };
+      // ── Transient errors — handle silently without logging as ERROR ──────────
 
       // PriceConditionNotMet is a transient race: the off-chain check passed but
-      // the on-chain oracle / pool state differs at execution time.  Surface this
-      // to the user so they know why the job isn't executing, and increment retries.
+      // the on-chain oracle ticked back before the tx was mined.  Don't mark the
+      // job permanently failed — it will be re-evaluated on the next poller tick.
       if (message.includes('PriceConditionNotMet')) {
-        await handleTransientError('On-chain price condition not met at execution time — this can happen with low liquidity pools where the price shifts between check and execution. Will retry next tick.');
+        logger.debug(
+          `[Executor] job ${job.id}: price condition no longer met at execution time — will retry next tick`
+        );
         return;
       }
 
       // DCAIntervalNotReached is similarly transient (timing edge case).
       if (message.includes('DCAIntervalNotReached')) {
-        await handleTransientError('DCA interval not yet reached at execution time. Will retry next tick.');
+        logger.debug(
+          `[Executor] job ${job.id}: DCA interval not yet reached at execution time — will retry next tick`
+        );
         return;
       }
 
       // Slippage exceeded is transient: the pool price moved between simulation
-      // and mine (or another trade hit the same block).
+      // and mine (or another trade hit the same block).  Don't permanently fail
+      // the job — it will be re-evaluated on the next poller tick when the price
+      // oracle and pool state are fresh.
       if (message.includes('Slippage exceeded')) {
-        await handleTransientError('Slippage exceeded at execution time — pool price moved between check and execution. Will retry next tick.');
+        logger.debug(
+          `[Executor] job ${job.id}: slippage exceeded at execution time — will retry next tick`
+        );
         return;
       }
 
@@ -184,7 +174,7 @@ export class Executor {
         logger.warn(
           { jobId: job.id, onChainJobId: ocId },
           '[Executor] JobNotFound — on_chain_job_id not found on current contract ' +
-          '(likely left over from an old deployment) — marking cancelled'
+            '(likely left over from an old deployment) — marking cancelled'
         );
         await this.jobStore.markCancelled(job.id);
         return;

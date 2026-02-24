@@ -476,8 +476,6 @@ export function StrategyBuilder({
       activeStepId = 'approve';
       if (requiredAllowance > 0n) {
         setStep('approve', 'active', 'Checking token allowance…');
-
-        // Check on-chain allowance
         const currentAllowance = (await publicClient.readContract({
           address: resolvedTokenIn as `0x${string}`,
           abi: ERC20_ABI,
@@ -485,51 +483,18 @@ export function StrategyBuilder({
           args: [address, AUTOMATION_MANAGER_ADDRESS],
         })) as bigint;
 
-        // Fetch existing active jobs to sum their committed amounts for this
-        // same tokenIn — the allowance must cover ALL strategies, not just this one.
-        let existingCommitted = 0n;
-        try {
-          const jobsRes = await fetch('/api/jobs', {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          });
-          if (jobsRes.ok) {
-            const jobsData = (await jobsRes.json()) as { jobs?: Array<{ type: string; status: string; params: Record<string, string | number> }> };
-            const activeJobs = (jobsData.jobs ?? []).filter(
-              (j) => !['executed', 'cancelled', 'failed'].includes(j.status)
-            );
-            for (const j of activeJobs) {
-              const jTokenIn = (j.params.tokenIn as string ?? '').toLowerCase();
-              if (jTokenIn === resolvedTokenIn.toLowerCase()) {
-                if (j.type === 'limit_order') {
-                  existingCommitted += BigInt(j.params.amountIn as string);
-                } else {
-                  const remaining = Math.max(
-                    0,
-                    (j.params.totalSwaps as number) - (j.params.swapsCompleted as number)
-                  );
-                  existingCommitted += BigInt(j.params.amountPerSwap as string) * BigInt(remaining);
-                }
-              }
-            }
-          }
-        } catch {
-          // Non-fatal — fall through with existingCommitted = 0
-        }
-
-        const totalNeeded = existingCommitted + requiredAllowance;
-
-        if (currentAllowance < totalNeeded) {
+        if (currentAllowance < requiredAllowance) {
           const approveAmount = unlimitedApproval
             ? MAX_UINT256
-            : totalNeeded;
+            : requiredAllowance;
           const decimals = tokenInDecimals;
           const sym = tokenInIsNative ? 'wCFX' : (tokenInInfo?.symbol ?? '');
-          const totalFormatted = formatUnits(approveAmount === MAX_UINT256 ? requiredAllowance : totalNeeded, decimals);
+          const totalFormatted = formatUnits(requiredAllowance, decimals);
           const approveLabel = unlimitedApproval
             ? 'unlimited'
             : kind === 'dca'
-              ? `${totalFormatted} ${sym} (incl. existing strategies)`
-              : `${totalFormatted} ${sym}${existingCommitted > 0n ? ' (incl. existing)' : ''}`;
+              ? `${totalFormatted} ${sym} (${amountPerSwap} × ${totalSwaps} orders)`
+              : `${totalFormatted} ${sym}`;
           setStep('approve', 'active', `Approve ${approveLabel}…`);
           const approveGas = await publicClient.estimateContractGas({
             address: resolvedTokenIn as `0x${string}`,
@@ -1509,7 +1474,7 @@ function TokenSelectButton({
                     }`}
                 >
                   <TokenPill token={t} />
-                  <div className="flex-1 min-w-0 flex items-center pr-2">
+                  <div className="flex-1 min-w-0">
                     <span className="font-semibold">{t.symbol}</span>
                     <span className="ml-1.5 text-slate-400 text-xs truncate">
                       {t.name}
