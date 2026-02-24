@@ -68,15 +68,15 @@ write_files:
       # HTTP — redirect everything to HTTPS (certbot fills the SSL block below)
       server {
           listen 80;
-          server_name cfxdevkit.org;
+          server_name cfxdevkit.org cas.cfxdevkit.org;
           return 301 https://$host$request_uri;
       }
 
-      # HTTPS — filled in by: certbot --nginx -d cfxdevkit.org
+      # HTTPS — filled in by: certbot --nginx -d cfxdevkit.org -d cas.cfxdevkit.org
       # (certbot appends/replaces this block automatically)
       server {
           listen 443 ssl;
-          server_name cfxdevkit.org;
+          server_name cfxdevkit.org cas.cfxdevkit.org;
 
           # ── Frontend (Next.js on :3000) ─────────────────────────────────
           location / {
@@ -244,7 +244,7 @@ runcmd:
     DATABASE_PATH=/data/cas.db
     JWT_SECRET=${JWT_SECRET}
     PORT=3001
-    CORS_ORIGIN=https://cfxdevkit.org
+    CORS_ORIGIN=https://cas.cfxdevkit.org
 
     # ── Worker ─────────────────────────────────────────────────────────────
     EXECUTOR_PRIVATE_KEY=@@EXECUTOR_PRIVATE_KEY@@
@@ -269,7 +269,7 @@ runcmd:
     # ── Frontend ───────────────────────────────────────────────────────────
     BACKEND_URL=http://backend:3001
     NEXT_PUBLIC_WC_PROJECT_ID=@@WC_PROJECT_ID@@
-    NEXT_PUBLIC_API_URL=https://cfxdevkit.org
+    NEXT_PUBLIC_API_URL=https://cas.cfxdevkit.org
     NEXT_PUBLIC_NETWORK=@@NETWORK@@
     NEXT_PUBLIC_AUTOMATION_MANAGER_ADDRESS=0x33e5e5b262e5d8ebc443e1c6c9f14215b020554d
     ENVEOF
@@ -299,23 +299,23 @@ runcmd:
   - systemctl restart fail2ban
 
   # ── 11. Issue TLS certificate via Let's Encrypt ────────────────────────
-  # Requires cfxdevkit.org DNS A record already pointing at this IP.
+  # Requires cfxdevkit.org and cas.cfxdevkit.org DNS A records already pointing at this IP.
   # If DNS is not ready yet, this step is skipped and you can run it manually:
-  #   sudo certbot --nginx -d cfxdevkit.org --non-interactive --agree-tos -m @@CERTBOT_EMAIL@@
+  #   sudo certbot --nginx -d cfxdevkit.org -d cas.cfxdevkit.org --non-interactive --agree-tos -m @@CERTBOT_EMAIL@@
   - |
-    if host cfxdevkit.org | grep -q "$(curl -s https://api.ipify.org)"; then
+    if host cas.cfxdevkit.org | grep -q "$(curl -s https://api.ipify.org)"; then
       certbot --nginx \
         --non-interactive \
         --agree-tos \
         --redirect \
-        -d cfxdevkit.org \
+        -d cas.cfxdevkit.org \
         -m @@CERTBOT_EMAIL@@ \
         && systemctl reload nginx \
         && echo "TLS certificate issued successfully."
     else
-      echo "WARN: cfxdevkit.org does not resolve to this server — skipping certbot."
+      echo "WARN: cas.cfxdevkit.org does not resolve to this server — skipping certbot."
       echo "      Run manually once DNS propagates:"
-      echo "      sudo certbot --nginx -d cfxdevkit.org --non-interactive --agree-tos -m @@CERTBOT_EMAIL@@"
+      echo "      sudo certbot --nginx -d cas.cfxdevkit.org --non-interactive --agree-tos -m @@CERTBOT_EMAIL@@"
     fi
 
 # ── Cloud-init completion message (visible in: sudo cloud-init status --long) ─

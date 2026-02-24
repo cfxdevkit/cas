@@ -2,7 +2,7 @@
 
 Non-custodial limit order and DCA automation on **Conflux eSpace**.
 
-**Live:** https://cfxdevkit.org  
+**Live:** https://cas.cfxdevkit.org  
 **Bounty:** [#08 — Conflux Automation Site](https://github.com/conflux-fans/conflux-bounties/issues/8)
 
 ---

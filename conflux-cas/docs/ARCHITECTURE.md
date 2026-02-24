@@ -16,7 +16,7 @@ graph TB
         FE["Next.js 14 Frontend\n(port 3000)\nwagmi · viem · Tailwind"]
     end
 
-    subgraph Server["Production Server (cfxdevkit.org)"]
+    subgraph Server["Production Server (cas.cfxdevkit.org)"]
         NG["nginx\nTLS termination\n/api/ → :3001"]
         BE["Express Backend\n(port 3001)\nDrizzle ORM · SQLite"]
         WK["Keeper Worker\nJob poller · SafetyGuard\nRetryQueue"]

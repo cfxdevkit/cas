@@ -1,6 +1,6 @@
 # Conflux Automation Site — User Manual
 
-> **Live app:** https://cfxdevkit.org  
+> **Live app:** https://cas.cfxdevkit.org  
 > **Local dev:** http://localhost:3000  
 > **Prerequisites:** MetaMask (or compatible EIP-1193 wallet) + some CFX
 
@@ -40,7 +40,7 @@ Get free testnet CFX at https://faucet.confluxnetwork.org/
 
 **As a user, I want to connect my wallet so the app knows who I am.**
 
-1. Open https://cfxdevkit.org — you see the **home page** with the tagline and strategy creation form.
+1. Open https://cas.cfxdevkit.org — you see the **home page** with the tagline and strategy creation form.
 2. In the top-right corner of the nav bar, click **Connect Wallet**.
 3. Select MetaMask in the wallet modal and approve the connection.
 4. The button changes to show your truncated address (e.g. `0xd8dA…6045`).

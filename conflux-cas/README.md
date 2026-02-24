@@ -1,6 +1,6 @@
 # Conflux Automation Site (CAS)
 
-> **Live:** https://cfxdevkit.org
+> **Live:** https://cas.cfxdevkit.org
 
 Non-custodial limit order and DCA (dollar-cost averaging) automation on
 **Conflux eSpace** — users sign strategies once with their wallet; a keeper
