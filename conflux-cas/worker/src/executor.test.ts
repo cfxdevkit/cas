@@ -7,13 +7,16 @@ import type { SafetyGuard } from './safety-guard.js';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-function makeLimitOrderJob(overrides: Partial<LimitOrderJob> = {}): LimitOrderJob {
+function makeLimitOrderJob(
+  overrides: Partial<LimitOrderJob> = {}
+): LimitOrderJob {
   return {
     id: 'lo-1',
     owner: '0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF',
     type: 'limit_order',
     status: 'active',
-    onChainJobId: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+    onChainJobId:
+      '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
     createdAt: Date.now() - 5000,
     updatedAt: Date.now(),
     expiresAt: null,
@@ -38,7 +41,8 @@ function makeDCAJob(overrides: Partial<DCAJob> = {}): DCAJob {
     owner: '0xDeaDbeefdEAdbeefdEadbEEFdeadbeEFdEaDbeeF',
     type: 'dca',
     status: 'active',
-    onChainJobId: '0xdca0000000000000000000000000000000000000000000000000000000000001',
+    onChainJobId:
+      '0xdca0000000000000000000000000000000000000000000000000000000000001',
     createdAt: Date.now() - 5000,
     updatedAt: Date.now(),
     expiresAt: null,
@@ -69,7 +73,6 @@ function makeJobStore() {
     markFailed: vi.fn().mockResolvedValue(undefined),
     incrementRetry: vi.fn().mockResolvedValue(undefined),
     markExpired: vi.fn().mockResolvedValue(undefined),
-    markExpired: vi.fn(),
     markCancelled: vi.fn().mockResolvedValue(undefined),
     updateLastError: vi.fn().mockResolvedValue(undefined),
   };
@@ -77,8 +80,12 @@ function makeJobStore() {
 
 function makeKeeperClient() {
   return {
-    executeLimitOrder: vi.fn().mockResolvedValue({ txHash: '0xtx', amountOut: '990000000000000000' }),
-    executeDCATick: vi.fn().mockResolvedValue({ txHash: '0xdcatx', amountOut: '99000000000000000' }),
+    executeLimitOrder: vi
+      .fn()
+      .mockResolvedValue({ txHash: '0xtx', amountOut: '990000000000000000' }),
+    executeDCATick: vi
+      .fn()
+      .mockResolvedValue({ txHash: '0xdcatx', amountOut: '99000000000000000' }),
     getOnChainStatus: vi.fn().mockResolvedValue('executed' as const),
   };
 }
@@ -112,14 +119,16 @@ function makeRetryQueue() {
 
 // ─── Helper: build a default Executor with all mocks passing ─────────────────
 
-function makeExecutor(options: {
-  store?: ReturnType<typeof makeJobStore>;
-  keeper?: ReturnType<typeof makeKeeperClient>;
-  priceChecker?: PriceChecker;
-  safetyGuard?: SafetyGuard;
-  retryQueue?: ReturnType<typeof makeRetryQueue>;
-  dryRun?: boolean;
-} = {}) {
+function makeExecutor(
+  options: {
+    store?: ReturnType<typeof makeJobStore>;
+    keeper?: ReturnType<typeof makeKeeperClient>;
+    priceChecker?: PriceChecker;
+    safetyGuard?: SafetyGuard;
+    retryQueue?: ReturnType<typeof makeRetryQueue>;
+    dryRun?: boolean;
+  } = {}
+) {
   const store = options.store ?? makeJobStore();
   const keeper = options.keeper ?? makeKeeperClient();
   const priceChecker = options.priceChecker ?? makePriceChecker(true);
@@ -131,7 +140,7 @@ function makeExecutor(options: {
     retryQueue as unknown as RetryQueue,
     keeper as unknown as KeeperClient,
     store as unknown as JobStore,
-    { dryRun: options.dryRun ?? false },
+    { dryRun: options.dryRun ?? false }
   );
   return { executor, store, keeper, priceChecker, safetyGuard, retryQueue };
 }
@@ -218,7 +227,9 @@ describe('Executor.processTick', () => {
 
   it('increments retries and updates last error on PriceConditionNotMet', async () => {
     const keeper = makeKeeperClient();
-    keeper.executeLimitOrder.mockRejectedValue(new Error('PriceConditionNotMet'));
+    keeper.executeLimitOrder.mockRejectedValue(
+      new Error('PriceConditionNotMet')
+    );
     const { executor, store } = makeExecutor({ keeper });
     const job = makeLimitOrderJob();
     await executor.processTick(job);
@@ -265,7 +276,9 @@ describe('Executor.processTick', () => {
     const priceChecker = makePriceChecker(false);
     const keeper = makeKeeperClient();
     const { executor, store } = makeExecutor({ priceChecker, keeper });
-    const job = makeDCAJob({ params: { ...makeDCAJob().params, nextExecution: Date.now() + 60_000 } });
+    const job = makeDCAJob({
+      params: { ...makeDCAJob().params, nextExecution: Date.now() + 60_000 },
+    });
     await executor.processTick(job);
     expect(keeper.executeDCATick).not.toHaveBeenCalled();
     expect(store.markDCATick).not.toHaveBeenCalled();
@@ -307,17 +320,27 @@ describe('Executor.processTick', () => {
 
   it('calls markExecuted with txHash on successful limit order', async () => {
     const keeper = makeKeeperClient();
-    keeper.executeLimitOrder.mockResolvedValue({ txHash: '0xdeadbeef', amountOut: '950000000000000000' });
+    keeper.executeLimitOrder.mockResolvedValue({
+      txHash: '0xdeadbeef',
+      amountOut: '950000000000000000',
+    });
     const { executor, store } = makeExecutor({ keeper });
     const job = makeLimitOrderJob();
     await executor.processTick(job);
-    expect(store.markExecuted).toHaveBeenCalledWith(job.id, '0xdeadbeef', '950000000000000000');
+    expect(store.markExecuted).toHaveBeenCalledWith(
+      job.id,
+      '0xdeadbeef',
+      '950000000000000000'
+    );
     expect(store.markFailed).not.toHaveBeenCalled();
   });
 
   it('calls markDCATick with updated swaps and nextExecution on successful DCA tick', async () => {
     const keeper = makeKeeperClient();
-    keeper.executeDCATick.mockResolvedValue({ txHash: '0xcafe', amountOut: '98000000000000000' });
+    keeper.executeDCATick.mockResolvedValue({
+      txHash: '0xcafe',
+      amountOut: '98000000000000000',
+    });
     const { executor, store } = makeExecutor({ keeper });
     const job = makeDCAJob(); // swapsCompleted = 2
     await executor.processTick(job);
@@ -326,7 +349,7 @@ describe('Executor.processTick', () => {
       '0xcafe',
       3, // swapsCompleted + 1
       expect.any(Number), // nextExecution
-      '98000000000000000',
+      '98000000000000000'
     );
   });
 
@@ -369,7 +392,10 @@ describe('Executor.runAllTicks', () => {
 
   it('processes all active jobs returned by the store', async () => {
     const store = makeJobStore();
-    store.getActiveJobs.mockResolvedValue([makeLimitOrderJob({ id: 'j1' }), makeDCAJob({ id: 'j2' })]);
+    store.getActiveJobs.mockResolvedValue([
+      makeLimitOrderJob({ id: 'j1' }),
+      makeDCAJob({ id: 'j2' }),
+    ]);
     const keeper = makeKeeperClient();
     const retryQueue = makeRetryQueue();
     (retryQueue.drainDue as ReturnType<typeof vi.fn>).mockReturnValue([]);
@@ -377,7 +403,7 @@ describe('Executor.runAllTicks', () => {
     await executor.runAllTicks();
     // Both jobs had conditions met → both executed
     expect(store.markExecuted).toHaveBeenCalledTimes(1); // the limit order
-    expect(store.markDCATick).toHaveBeenCalledTimes(1);  // the DCA job
+    expect(store.markDCATick).toHaveBeenCalledTimes(1); // the DCA job
   });
 
   it('also processes jobs from the retry queue', async () => {
@@ -385,9 +411,15 @@ describe('Executor.runAllTicks', () => {
     store.getActiveJobs.mockResolvedValue([]);
     const retryJob = makeLimitOrderJob({ id: 'retry-j1', retries: 2 });
     const retryQueue = makeRetryQueue();
-    (retryQueue.drainDue as ReturnType<typeof vi.fn>).mockReturnValue([retryJob]);
+    (retryQueue.drainDue as ReturnType<typeof vi.fn>).mockReturnValue([
+      retryJob,
+    ]);
     const { executor } = makeExecutor({ store, retryQueue });
     await executor.runAllTicks();
-    expect(store.markExecuted).toHaveBeenCalledWith(retryJob.id, '0xtx', '990000000000000000');
+    expect(store.markExecuted).toHaveBeenCalledWith(
+      retryJob.id,
+      '0xtx',
+      '990000000000000000'
+    );
   });
 });

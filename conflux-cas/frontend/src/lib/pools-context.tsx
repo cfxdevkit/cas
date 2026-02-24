@@ -25,16 +25,14 @@ import {
   useState,
 } from 'react';
 import { useAccount } from 'wagmi';
-import {
-  usePoolTokens,
-  type UsePoolTokensResult,
-} from '@/hooks/usePoolTokens';
+import { type UsePoolTokensResult, usePoolTokens } from '@/hooks/usePoolTokens';
 
 const PoolsContext = createContext<UsePoolTokensResult | null>(null);
 
 export function usePoolsContext(): UsePoolTokensResult {
   const ctx = useContext(PoolsContext);
-  if (!ctx) throw new Error('usePoolsContext must be used inside PoolsProvider');
+  if (!ctx)
+    throw new Error('usePoolsContext must be used inside PoolsProvider');
   return ctx;
 }
 

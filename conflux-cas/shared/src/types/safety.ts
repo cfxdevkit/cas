@@ -4,4 +4,3 @@ export type {
   SafetyConfig,
   SafetyViolation,
 } from '@cfxdevkit/sdk/automation';
-

@@ -1,7 +1,9 @@
 'use client';
 
+import { Plus, RefreshCcw, ShieldCheck, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { injected, useAccount, useConnect } from 'wagmi';
+import { ApprovalWidget } from '@/components/Dashboard/ApprovalWidget';
 import { Dashboard } from '@/components/Dashboard/Dashboard';
 import { StrategyBuilder } from '@/components/StrategyBuilder/StrategyBuilder';
 import { WcfxWrapModal } from '@/components/StrategyBuilder/WcfxWrapModal';
@@ -10,7 +12,6 @@ import {
   useNetworkSwitch,
 } from '@/hooks/useNetworkSwitch';
 import { useAuthContext } from '@/lib/auth-context';
-import { Plus, RefreshCcw, X } from 'lucide-react';
 
 // ── Strategy modal ────────────────────────────────────────────────────────────
 
@@ -59,7 +60,9 @@ function StrategyModal({
             type="button"
             onClick={txInProgress ? undefined : onClose}
             disabled={txInProgress}
-            title={txInProgress ? 'Complete or cancel transactions first' : 'Close'}
+            title={
+              txInProgress ? 'Complete or cancel transactions first' : 'Close'
+            }
             className={`p-1 rounded-lg transition-colors ${txInProgress ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
             aria-label="Close"
           >
@@ -69,7 +72,10 @@ function StrategyModal({
 
         {/* Body — scrollable */}
         <div className="flex-1 overflow-y-auto px-6 py-6">
-          <StrategyBuilder onSuccess={onClose} onSubmittingChange={setTxInProgress} />
+          <StrategyBuilder
+            onSuccess={onClose}
+            onSubmittingChange={setTxInProgress}
+          />
         </div>
       </div>
     </div>
@@ -87,10 +93,13 @@ export default function HomePage() {
   const [mounted, setMounted] = useState(false);
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [wrapOpen, setWrapOpen] = useState(false);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
   const openStrategy = useCallback(() => setStrategyOpen(true), []);
   const closeStrategy = useCallback(() => setStrategyOpen(false), []);
   const openWrap = useCallback(() => setWrapOpen(true), []);
   const closeWrap = useCallback(() => setWrapOpen(false), []);
+  const openApprovals = useCallback(() => setApprovalsOpen(true), []);
+  const closeApprovals = useCallback(() => setApprovalsOpen(false), []);
 
   useEffect(() => setMounted(true), []);
 
@@ -104,11 +113,16 @@ export default function HomePage() {
         <div className="space-y-6 relative">
           <div className="absolute inset-0 bg-conflux-500/20 blur-[100px] -z-10 rounded-full" />
           <h1 className="text-5xl md:text-7xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-white to-slate-400 tracking-tight leading-tight">
-            Automate your <span className="text-transparent bg-clip-text bg-gradient-to-r from-conflux-400 to-blue-600">Conflux</span> De-Fi
+            Automate your{' '}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-conflux-400 to-blue-600">
+              Conflux
+            </span>{' '}
+            De-Fi
           </h1>
           <p className="text-lg md:text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed font-light">
             Non-custodial limit orders and DCA strategies on Conflux eSpace.
-            Your keys, your tokens — executed automatically by decentralized keepers.
+            Your keys, your tokens — executed automatically by decentralized
+            keepers.
           </p>
         </div>
         <button
@@ -180,7 +194,8 @@ export default function HomePage() {
             Verify Ownership
           </h1>
           <p className="text-lg md:text-xl text-slate-400 max-w-xl mx-auto leading-relaxed">
-            Sign the message in your wallet to securely authenticate. This does not trigger any blockchain transaction or cost gas.
+            Sign the message in your wallet to securely authenticate. This does
+            not trigger any blockchain transaction or cost gas.
           </p>
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800/60 border border-slate-700 rounded-full text-sm font-mono text-slate-300">
             <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24] animate-pulse" />
@@ -194,9 +209,15 @@ export default function HomePage() {
             className="group relative inline-flex items-center justify-center bg-conflux-600 hover:bg-conflux-500 text-white text-lg font-semibold py-4 px-12 rounded-2xl transition-all shadow-[0_0_30px_-5px_rgba(0,120,200,0.5)] hover:shadow-[0_0_40px_-5px_rgba(0,120,200,0.7)] overflow-hidden"
           >
             <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-shimmer" />
-            <span className="relative text-white font-semibold">Sign In with Wallet</span>
+            <span className="relative text-white font-semibold">
+              Sign In with Wallet
+            </span>
           </button>
-          {error && <p className="text-red-400 bg-red-950/40 border border-red-900/50 px-4 py-2 rounded-lg text-sm max-w-sm mt-2">{error}</p>}
+          {error && (
+            <p className="text-red-400 bg-red-950/40 border border-red-900/50 px-4 py-2 rounded-lg text-sm max-w-sm mt-2">
+              {error}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -225,6 +246,14 @@ export default function HomePage() {
             </button>
             <button
               type="button"
+              onClick={openApprovals}
+              className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-semibold py-2 px-4 rounded-xl transition-all shadow-sm text-sm"
+            >
+              <ShieldCheck className="h-4 w-4 text-conflux-400" />
+              Approvals
+            </button>
+            <button
+              type="button"
               onClick={openStrategy}
               className="inline-flex items-center gap-2 bg-conflux-600 hover:bg-conflux-500 text-white font-semibold py-2 px-4 rounded-xl transition-all shadow-md shadow-conflux-900/40 text-sm group"
             >
@@ -241,6 +270,7 @@ export default function HomePage() {
       {/* ── Modals ── */}
       <StrategyModal open={strategyOpen} onClose={closeStrategy} />
       <WcfxWrapModal open={wrapOpen} onClose={closeWrap} />
+      <ApprovalWidget open={approvalsOpen} onClose={closeApprovals} />
     </>
   );
 }

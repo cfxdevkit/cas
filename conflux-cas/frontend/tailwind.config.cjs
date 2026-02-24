@@ -31,14 +31,14 @@ const config = {
           '0%': { transform: 'scale(0.95)', opacity: '0' },
           '100%': { transform: 'scale(1)', opacity: '1' },
         },
-        'shimmer': {
-          '100%': { transform: 'translateX(100%)' }
+        shimmer: {
+          '100%': { transform: 'translateX(100%)' },
         },
       },
       animation: {
         'slide-in-right': 'slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         'modal-in': 'modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-        'shimmer': 'shimmer 1.5s infinite',
+        shimmer: 'shimmer 1.5s infinite',
       },
     },
   },

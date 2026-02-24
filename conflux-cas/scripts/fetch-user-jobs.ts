@@ -1,5 +1,5 @@
-import { createPublicClient, http, parseEventLogs } from 'viem';
 import { AUTOMATION_MANAGER_ABI } from '@cfxdevkit/sdk/automation';
+import { createPublicClient, http, parseEventLogs } from 'viem';
 
 function usage() {
   console.log(`Usage: pnpm dlx tsx scripts/fetch-user-jobs.ts --rpc <RPC_URL> --am <AutomationManagerAddress> --owner <ownerAddress> [--fromBlock <num>] [--toBlock <num>]
@@ -38,9 +38,15 @@ async function main() {
   console.log(`Fetching logs for AutomationManager=${am} from RPC=${rpc} ...`);
   const logs = await client.getLogs(opts);
 
-  const events = parseEventLogs({ abi: AUTOMATION_MANAGER_ABI as any, eventName: 'JobCreated', logs });
+  const events = parseEventLogs({
+    abi: AUTOMATION_MANAGER_ABI as any,
+    eventName: 'JobCreated',
+    logs,
+  });
 
-  const filtered = events.filter((ev: any) => ev.args.owner.toLowerCase() === owner.toLowerCase());
+  const filtered = events.filter(
+    (ev: any) => ev.args.owner.toLowerCase() === owner.toLowerCase()
+  );
 
   console.log(`Found ${filtered.length} JobCreated events for owner ${owner}`);
 
@@ -57,7 +63,8 @@ async function main() {
       });
 
       const statusNum = Number(j.status ?? 0);
-      const status = ['active', 'executed', 'cancelled', 'expired'][statusNum] ?? 'unknown';
+      const status =
+        ['active', 'executed', 'cancelled', 'expired'][statusNum] ?? 'unknown';
       results.push({ jobId, status, raw: j });
     } catch (err: unknown) {
       results.push({ jobId, error: String(err) });

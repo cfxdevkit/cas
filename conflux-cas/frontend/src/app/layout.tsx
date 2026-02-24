@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Outfit, JetBrains_Mono } from 'next/font/google';
+import { JetBrains_Mono, Outfit } from 'next/font/google';
 import './globals.css';
 import { NavBar } from '@/components/shared/NavBar';
 import { WagmiProvider } from './providers';
@@ -22,7 +22,9 @@ export default function RootLayout({
       <body className="min-h-screen bg-slate-950 text-slate-100 font-sans antialiased selection:bg-conflux-500/30">
         <WagmiProvider>
           <NavBar />
-          <main className="mx-auto max-w-7xl px-4 py-8 md:py-12">{children}</main>
+          <main className="mx-auto max-w-7xl px-4 py-8 md:py-12">
+            {children}
+          </main>
         </WagmiProvider>
       </body>
     </html>

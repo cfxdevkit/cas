@@ -183,7 +183,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const msg = err instanceof Error ? err.message : 'Login failed';
       // Don't surface "User rejected" as a scary error — just show retry.
       if (msg.includes('getChainId is not a function')) {
-        setError('Wallet connection issue. Please reconnect your wallet or try a different provider.');
+        setError(
+          'Wallet connection issue. Please reconnect your wallet or try a different provider.'
+        );
       } else {
         setError(
           msg.toLowerCase().includes('rejected')

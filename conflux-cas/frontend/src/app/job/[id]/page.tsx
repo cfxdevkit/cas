@@ -632,10 +632,11 @@ function TriggerRow({ direction }: { direction: string }) {
       <span className={LABEL_CLS}>Trigger</span>
       <div className={VAL_COL}>
         <div
-          className={`${CHIP_CLS} ${isGte
-            ? 'border-emerald-800/70 bg-emerald-950/40'
-            : 'border-amber-800/70 bg-amber-950/40'
-            }`}
+          className={`${CHIP_CLS} ${
+            isGte
+              ? 'border-emerald-800/70 bg-emerald-950/40'
+              : 'border-amber-800/70 bg-amber-950/40'
+          }`}
         >
           <span
             className={`text-base leading-none ${isGte ? 'text-emerald-400' : 'text-amber-400'}`}

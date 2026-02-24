@@ -3,7 +3,16 @@
   "root": false,
   "extends": "//",
   "files": {
-    "includes": ["**", "!node_modules", "!dist", "!.next", "!artifacts", "!cache", "!coverage", "!typechain-types"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/.next",
+      "!**/artifacts",
+      "!**/cache",
+      "!**/coverage",
+      "!**/typechain-types"
+    ]
   },
   "css": {
     "linter": {

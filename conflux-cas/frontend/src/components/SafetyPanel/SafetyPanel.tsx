@@ -64,7 +64,10 @@ export function SafetyPanel({ config, onUpdate }: SafetyPanelProps) {
 
       {/* Max Swap USD */}
       <div>
-        <label htmlFor="safety-max-swap-usd" className="block text-sm text-slate-400 mb-1">
+        <label
+          htmlFor="safety-max-swap-usd"
+          className="block text-sm text-slate-400 mb-1"
+        >
           Max Swap Value (USD): ${localConfig.maxSwapUsd.toLocaleString()}
         </label>
         <input
@@ -86,7 +89,10 @@ export function SafetyPanel({ config, onUpdate }: SafetyPanelProps) {
 
       {/* Max Slippage */}
       <div>
-        <label htmlFor="safety-max-slippage" className="block text-sm text-slate-400 mb-1">
+        <label
+          htmlFor="safety-max-slippage"
+          className="block text-sm text-slate-400 mb-1"
+        >
           Max Slippage: {(localConfig.maxSlippageBps / 100).toFixed(1)}%
         </label>
         <input
@@ -108,7 +114,10 @@ export function SafetyPanel({ config, onUpdate }: SafetyPanelProps) {
 
       {/* Max Retries */}
       <div>
-        <label htmlFor="safety-max-retries" className="block text-sm text-slate-400 mb-1">
+        <label
+          htmlFor="safety-max-retries"
+          className="block text-sm text-slate-400 mb-1"
+        >
           Max Retries: {localConfig.maxRetries}
         </label>
         <input

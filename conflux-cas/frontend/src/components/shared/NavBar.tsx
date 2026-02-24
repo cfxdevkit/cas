@@ -1,15 +1,10 @@
 'use client';
 
+import { Activity, ShieldCheck, Zap } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useIsAdmin } from '../../hooks/useIsAdmin';
 import { WalletConnect } from './WalletConnect';
-
-import {
-  Activity,
-  ShieldCheck,
-  Zap,
-} from 'lucide-react';
 
 export function NavBar() {
   const isAdmin = useIsAdmin();
@@ -33,12 +28,18 @@ export function NavBar() {
         {/* Links */}
         <div className="hidden md:flex items-center gap-6 text-slate-400 text-sm font-medium">
           {mounted && isAdmin && (
-            <Link href="/safety" className="hover:text-white transition-colors flex items-center gap-1.5">
+            <Link
+              href="/safety"
+              className="hover:text-white transition-colors flex items-center gap-1.5"
+            >
               <ShieldCheck className="h-4 w-4" />
               Safety
             </Link>
           )}
-          <Link href="/status" className="hover:text-white transition-colors flex items-center gap-1.5">
+          <Link
+            href="/status"
+            className="hover:text-white transition-colors flex items-center gap-1.5"
+          >
             <Activity className="h-4 w-4" />
             Status
           </Link>

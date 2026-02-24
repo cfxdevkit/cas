@@ -51,6 +51,8 @@ export interface JobStore {
   markExpired(jobId: string): Promise<void>;
   /** Mark a job cancelled — use when on-chain status is CANCELLED. */
   markCancelled(jobId: string): Promise<void>;
+  /** Record the latest error message without changing status or incrementing retries. */
+  updateLastError(jobId: string, error: string): Promise<void>;
 }
 
 export interface ExecutorOptions {
@@ -119,6 +121,8 @@ export class Executor {
         logger.debug(
           `[Executor] job ${job.id}: price condition no longer met at execution time — will retry next tick`
         );
+        await this.jobStore.incrementRetry(job.id);
+        await this.jobStore.updateLastError(job.id, message);
         return;
       }
 
@@ -127,6 +131,8 @@ export class Executor {
         logger.debug(
           `[Executor] job ${job.id}: DCA interval not yet reached at execution time — will retry next tick`
         );
+        await this.jobStore.incrementRetry(job.id);
+        await this.jobStore.updateLastError(job.id, message);
         return;
       }
 
@@ -138,6 +144,8 @@ export class Executor {
         logger.debug(
           `[Executor] job ${job.id}: slippage exceeded at execution time — will retry next tick`
         );
+        await this.jobStore.incrementRetry(job.id);
+        await this.jobStore.updateLastError(job.id, message);
         return;
       }
 

@@ -6,6 +6,7 @@
  * unless the user has set an on-chain allowance for that specific swap.
  */
 
+import { AUTOMATION_MANAGER_ABI } from '@cfxdevkit/sdk/automation';
 import type { DCAJob, LimitOrderJob } from '@conflux-cas/shared';
 import {
   type Address,
@@ -15,10 +16,8 @@ import {
   http,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { AUTOMATION_MANAGER_ABI } from '@cfxdevkit/sdk/automation';
 import type { KeeperClient as IKeeperClient } from './executor.js';
 import { logger } from './logger.js';
-
 
 // --------------------------------------------------------------------------
 // Helpers

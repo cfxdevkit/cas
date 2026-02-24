@@ -1,17 +1,17 @@
 'use client';
 
 import type { DCAJob, Job, LimitOrderJob } from '@conflux-cas/shared';
+import { ClipboardList } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatUnits } from 'viem';
 import { useAccount, usePublicClient, useWriteContract } from 'wagmi';
+import { useTokenPrice } from '@/hooks/useTokenPrice';
 import { useAuthContext } from '@/lib/auth-context';
 import {
   AUTOMATION_MANAGER_ABI,
   AUTOMATION_MANAGER_ADDRESS,
 } from '@/lib/contracts';
-import { ClipboardList, Plus } from 'lucide-react';
-import { useTokenPrice } from '@/hooks/useTokenPrice';
 
 const CACHE_KEY = 'cas_pool_meta_v2';
 const POLL_MS = 30_000;
@@ -103,19 +103,33 @@ const TERMINAL = new Set(['executed', 'cancelled', 'failed']);
 
 function StatusBadge({ status }: { status: string }) {
   const norm = status.toLowerCase();
-  const s = STATUS_STYLES[norm] || { dot: 'bg-slate-400', text: 'text-slate-300' };
+  const s = STATUS_STYLES[norm] || {
+    dot: 'bg-slate-400',
+    text: 'text-slate-300',
+  };
 
   return (
     <div className="flex items-center gap-2 font-medium w-24">
-      <div className={`w-2 h-2 rounded-full shrink-0 ${s.dot} shadow-[0_0_8px_currentColor]`} style={{ color: 'var(--tw-shadow-color)' }} />
-      <span className={`text-sm tracking-wide capitalize ${s.text}`}>{status}</span>
+      <div
+        className={`w-2 h-2 rounded-full shrink-0 ${s.dot} shadow-[0_0_8px_currentColor]`}
+        style={{ color: 'var(--tw-shadow-color)' }}
+      />
+      <span className={`text-sm tracking-wide capitalize ${s.text}`}>
+        {status}
+      </span>
     </div>
   );
 }
 
 // ─── Mini token chip ──────────────────────────────────────────────────────────
 
-function TokenChip({ meta, size = 'sm' }: { meta?: TokenMeta; size?: 'xs' | 'sm' }) {
+function TokenChip({
+  meta,
+  size = 'sm',
+}: {
+  meta?: TokenMeta;
+  size?: 'xs' | 'sm';
+}) {
   const dim = size === 'xs' ? 'h-4 w-4' : 'h-5 w-5';
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -129,9 +143,14 @@ function TokenChip({ meta, size = 'sm' }: { meta?: TokenMeta; size?: 'xs' | 'sm'
           }}
         />
       ) : (
-        <span className={`${dim} rounded-full bg-slate-700 ring-1 ring-slate-600/50 flex-shrink-0`} />
+        <span
+          className={`${dim} rounded-full bg-slate-700 ring-1 ring-slate-600/50 flex-shrink-0`}
+        />
       )}
-      <span className="font-semibold text-slate-200 truncate max-w-[80px]" title={meta?.symbol ?? '?'}>
+      <span
+        className="font-semibold text-slate-200 truncate max-w-[80px]"
+        title={meta?.symbol ?? '?'}
+      >
         {meta?.symbol ?? '?'}
       </span>
     </span>
@@ -190,7 +209,7 @@ function JobRow({
   };
 
   const isTerminal = TERMINAL.has(job.status);
-  const badgeCls = STATUS_STYLES[job.status] ?? STATUS_STYLES.failed;
+  const _badgeCls = STATUS_STYLES[job.status] ?? STATUS_STYLES.failed;
   const isLimit = job.type === 'limit_order';
 
   const loTIn = isLimit ? (job as LimitOrderJob).params.tokenIn : undefined;
@@ -253,10 +272,11 @@ function JobRow({
     targetCell = (
       <div className="flex items-center">
         <span
-          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${isGte
-            ? 'border-emerald-800/70 bg-emerald-950/40 text-emerald-300'
-            : 'border-amber-800/70 bg-amber-950/40 text-amber-300'
-            }`}
+          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-medium ${
+            isGte
+              ? 'border-emerald-800/70 bg-emerald-950/40 text-emerald-300'
+              : 'border-amber-800/70 bg-amber-950/40 text-amber-300'
+          }`}
         >
           {isGte ? '↑' : '↓'} {tgt} <TokenChip meta={metaOut} size="xs" />
         </span>
@@ -313,7 +333,10 @@ function JobRow({
       <td className="px-4 py-4 whitespace-nowrap first:rounded-l-xl">
         <StatusBadge status={job.status} />
         {!isTerminal && job.lastError && (
-          <p className="mt-1 text-[10px] text-amber-400/80 truncate max-w-[12rem]" title={job.lastError}>
+          <p
+            className="mt-1 text-[10px] text-amber-400/80 truncate max-w-[12rem]"
+            title={job.lastError}
+          >
             ⚠ {job.lastError}
           </p>
         )}
@@ -334,12 +357,18 @@ function JobRow({
       <td className="px-4 py-4 whitespace-nowrap min-w-[120px]">
         <span className="inline-flex items-center gap-1.5 font-medium text-slate-200 bg-slate-900/50 rounded-lg px-2.5 py-1 text-sm border border-slate-700/50 w-fit">
           <TokenChip meta={metaIn} size="xs" />
-          <span className="truncate max-w-[80px]" title={amtIn}>{amtIn}</span>
-          <span className="text-xs text-slate-500 truncate max-w-[50px]">{symIn}</span>
+          <span className="truncate max-w-[80px]" title={amtIn}>
+            {amtIn}
+          </span>
+          <span className="text-xs text-slate-500 truncate max-w-[50px]">
+            {symIn}
+          </span>
         </span>
       </td>
       {/* Target / Progress */}
-      <td className="px-4 py-4 whitespace-nowrap text-xs text-slate-300">{targetCell}</td>
+      <td className="px-4 py-4 whitespace-nowrap text-xs text-slate-300">
+        {targetCell}
+      </td>
       {/* Retries */}
       <td className="px-4 py-4 whitespace-nowrap text-xs text-slate-500 font-medium">
         {job.retries}/{job.maxRetries}
@@ -477,9 +506,12 @@ export function Dashboard({ onCreateNew }: { onCreateNew?: () => void } = {}) {
         <div className="flex bg-slate-800/50 w-12 h-12 rounded-full items-center justify-center text-slate-500 mb-4">
           <ClipboardList className="h-6 w-6" />
         </div>
-        <h3 className="text-base font-semibold text-slate-300">No active strategies</h3>
+        <h3 className="text-base font-semibold text-slate-300">
+          No active strategies
+        </h3>
         <p className="text-sm text-slate-500 mt-1.5 max-w-sm text-center">
-          When you create automation orders like limit swaps or DCA strategies, they will appear here.
+          When you create automation orders like limit swaps or DCA strategies,
+          they will appear here.
         </p>
       </div>
     );
