@@ -560,6 +560,24 @@ export function usePoolTokens(
     []
   );
 
+  // ── Tick-watcher: re-fetch on-chain balances on every refresh() / 30s tick ─
+  // The main Phase-1 effect already fetches balances on first mount via
+  // fetchBalances(userAddress, signal).  This separate effect runs on every
+  // subsequent tick so manual refresh calls and the 30 s interval actually work.
+  const tickMountedRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: _tick is intentionally a trigger-only dep, not referenced inside the effect body
+  useEffect(() => {
+    // Skip tick=0 (initial mount) — Phase 1 handles the first fetch.
+    if (!tickMountedRef.current) {
+      tickMountedRef.current = true;
+      return;
+    }
+    if (!userAddress) return;
+    const ctrl = new AbortController();
+    void fetchBalances(userAddress, ctrl.signal);
+    return () => ctrl.abort();
+  }, [_tick, userAddress, fetchBalances]);
+
   // ── Phase 1: metadata (cache-first → background refresh) ──────────────────
   useEffect(() => {
     const abortCtrl = new AbortController();

@@ -12,6 +12,7 @@ import {
   AUTOMATION_MANAGER_ABI,
   AUTOMATION_MANAGER_ADDRESS,
 } from '@/lib/contracts';
+import { usePoolsContext } from '@/lib/pools-context';
 
 const CACHE_KEY = 'cas_pool_meta_v2';
 const POLL_MS = 30_000;
@@ -170,6 +171,7 @@ function JobRow({
 }) {
   const [cancelling, setCancelling] = useState(false);
   const { token } = useAuthContext();
+  const { refresh } = usePoolsContext();
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
 
@@ -202,6 +204,7 @@ function JobRow({
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
+      refresh();
       onCancel(job.id);
     } catch {
       setCancelling(false);
