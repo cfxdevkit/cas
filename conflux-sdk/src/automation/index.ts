@@ -29,7 +29,7 @@ export {
 export type { KeeperClient } from './keeper-interface.js';
 export type { AutomationLogger } from './logger.js';
 export { noopLogger } from './logger.js';
-export type { PriceCheckResult, PriceSource } from './price-checker.js';
+export type { DecimalsResolver, PriceCheckResult, PriceSource } from './price-checker.js';
 export { PriceChecker } from './price-checker.js';
 export { RetryQueue } from './retry-queue.js';
 export { DEFAULT_SAFETY_CONFIG, SafetyGuard } from './safety-guard.js';

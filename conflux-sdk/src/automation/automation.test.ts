@@ -10,6 +10,7 @@ import {
   PriceChecker,
   RetryQueue,
   SafetyGuard,
+  noopLogger,
 } from './index.js';
 import type { DCAJob, LimitOrderJob } from './types.js';
 
@@ -343,5 +344,34 @@ describe('PriceChecker', () => {
     const pc = new PriceChecker(mockPriceSource);
     const result = await pc.checkLimitOrder(makeLimitOrderJob());
     expect(result.swapUsd).toBe(0);
+  });
+
+  it('_estimateUsd uses correct divisor for 6-decimal token (e.g. USDC)', async () => {
+    // Resolver that returns 6 decimals for 0xtokenin
+    const getDecimals = async (t: string) => t.toLowerCase() === '0xtokenin' ? 6 : 18;
+    const pc = new PriceChecker(mockPriceSource, new Map(), noopLogger, getDecimals);
+    pc.updateTokenPrice('0xtokenin', 1); // 1 USDC = $1
+    const job = makeLimitOrderJob({
+      params: {
+        tokenIn: '0xTokenIn',
+        tokenOut: '0xTokenOut',
+        amountIn: '1000000', // 1 USDC in raw 6-decimal units
+        minAmountOut: '990000000000000000',
+        targetPrice: '1000000000000000000',
+        direction: 'gte',
+      },
+    });
+    const result = await pc.checkLimitOrder(job);
+    // 1_000_000 / 10^6 = 1.0, multiplied by $1 = $1
+    expect(result.swapUsd).toBeCloseTo(1, 4);
+  });
+
+  it('_estimateUsd correct for 18-decimal token via explicit resolver', async () => {
+    const getDecimals = async () => 18;
+    const pc = new PriceChecker(mockPriceSource, new Map(), noopLogger, getDecimals);
+    pc.updateTokenPrice('0xtokenin', 2000);
+    const job = makeLimitOrderJob(); // amountIn = 1e18
+    const result = await pc.checkLimitOrder(job);
+    expect(result.swapUsd).toBeCloseTo(2000, 0);
   });
 });

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { injected, useAccount, useConnect } from 'wagmi';
+import { ApprovalWidget } from '@/components/Dashboard/ApprovalWidget';
 import { Dashboard } from '@/components/Dashboard/Dashboard';
 import { StrategyBuilder } from '@/components/StrategyBuilder/StrategyBuilder';
 import { WcfxWrapModal } from '@/components/StrategyBuilder/WcfxWrapModal';
@@ -10,7 +11,7 @@ import {
   useNetworkSwitch,
 } from '@/hooks/useNetworkSwitch';
 import { useAuthContext } from '@/lib/auth-context';
-import { Plus, RefreshCcw, X } from 'lucide-react';
+import { Plus, RefreshCcw, ShieldCheck, X } from 'lucide-react';
 
 // ── Strategy modal ────────────────────────────────────────────────────────────
 
@@ -87,10 +88,13 @@ export default function HomePage() {
   const [mounted, setMounted] = useState(false);
   const [strategyOpen, setStrategyOpen] = useState(false);
   const [wrapOpen, setWrapOpen] = useState(false);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
   const openStrategy = useCallback(() => setStrategyOpen(true), []);
   const closeStrategy = useCallback(() => setStrategyOpen(false), []);
   const openWrap = useCallback(() => setWrapOpen(true), []);
   const closeWrap = useCallback(() => setWrapOpen(false), []);
+  const openApprovals = useCallback(() => setApprovalsOpen(true), []);
+  const closeApprovals = useCallback(() => setApprovalsOpen(false), []);
 
   useEffect(() => setMounted(true), []);
 
@@ -217,6 +221,14 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={openApprovals}
+              className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-semibold py-2 px-4 rounded-xl transition-all shadow-sm text-sm"
+            >
+              <ShieldCheck className="h-4 w-4 text-emerald-400" />
+              Approvals
+            </button>
+            <button
+              type="button"
               onClick={openWrap}
               className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 font-semibold py-2 px-4 rounded-xl transition-all shadow-sm text-sm"
             >
@@ -241,6 +253,7 @@ export default function HomePage() {
       {/* ── Modals ── */}
       <StrategyModal open={strategyOpen} onClose={closeStrategy} />
       <WcfxWrapModal open={wrapOpen} onClose={closeWrap} />
+      <ApprovalWidget open={approvalsOpen} onClose={closeApprovals} />
     </>
   );
 }

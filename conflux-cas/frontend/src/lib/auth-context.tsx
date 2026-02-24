@@ -113,7 +113,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const autoSignedForRef = useRef<string | null>(null);
 
   // ── Clear token when wallet disconnects or address changes ────────────────
+  // Skip clearing the token on the initial client mount. Without this guard
+  // a brief period where `address` is null (while wagmi reconnects) would
+  // cause the stored JWT to be removed and force the user to re-sign.
+  const mountedRef = useRef(false);
   useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
     if (!address) {
       setToken(null);
       localStorage.removeItem(TOKEN_KEY);

@@ -106,6 +106,58 @@ function getConfig() {
 }
 
 // --------------------------------------------------------------------------
+// ERC-20 decimals — fetched on-chain & cached
+// --------------------------------------------------------------------------
+
+const ERC20_DECIMALS_ABI = [
+  {
+    inputs: [],
+    name: 'decimals',
+    outputs: [{ internalType: 'uint8', name: '', type: 'uint8' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
+
+/**
+ * Create a function that fetches (and caches) the `decimals()` value of any
+ * ERC-20 token directly from the chain.  This is more robust than a static
+ * lookup table because it automatically handles every token, including ones
+ * we've never seen before.
+ */
+function createDecimalsResolver(
+  publicClient: ReturnType<typeof createPublicClient>
+): (token: string) => Promise<number> {
+  const cache = new Map<string, number>();
+  return async (token: string): Promise<number> => {
+    const key = token.toLowerCase();
+    const cached = cache.get(key);
+    if (cached !== undefined) return cached;
+
+    try {
+      const decimals = await publicClient.readContract({
+        address: token as `0x${string}`,
+        abi: ERC20_DECIMALS_ABI,
+        functionName: 'decimals',
+      });
+      const d = Number(decimals);
+      cache.set(key, d);
+      logger.info({ token, decimals: d }, '[DecimalsResolver] fetched on-chain');
+      return d;
+    } catch (err) {
+      // If the call fails (e.g. non-standard token without decimals()),
+      // fall back to 18 and cache it so we only log once.
+      logger.warn(
+        { token, reason: err instanceof Error ? err.message : String(err) },
+        '[DecimalsResolver] decimals() call failed — defaulting to 18'
+      );
+      cache.set(key, 18);
+      return 18;
+    }
+  };
+}
+
+// --------------------------------------------------------------------------
 // Real on-chain price source via Swappi (UniswapV2-compatible) router
 // --------------------------------------------------------------------------
 
@@ -124,39 +176,94 @@ const SWAPPI_ROUTER_ABI = [
   },
 ] as const;
 
+/** Wrapped CFX (wCFX) — the standard intermediary for multi-hop swaps.
+ *  Addresses confirmed via Swappi router's WETH() view function. */
+const WCFX_ADDRESS = {
+  testnet: '0x2ed3dddae5b2f321af0806181fbfa6d049be47d8' as `0x${string}`,
+  mainnet: '0x14b2d3bc65e74dae1030eafd8ac30c533c976a9b' as `0x${string}`,
+} as const;
+
 function createSwappiPriceSource(
   publicClient: ReturnType<typeof createPublicClient>,
-  routerAddress: `0x${string}`
+  routerAddress: `0x${string}`,
+  getDecimals: (token: string) => Promise<number>,
+  wCFX: `0x${string}`
 ): PriceSource {
+  /**
+   * Try getAmountsOut with the given path.  Returns the final amountOut on
+   * success, or null if the call reverts (pair doesn't exist / no liquidity).
+   */
+  async function tryPath(
+    probeAmount: bigint,
+    path: `0x${string}`[]
+  ): Promise<bigint | null> {
+    try {
+      const amounts = (await publicClient.readContract({
+        address: routerAddress,
+        abi: SWAPPI_ROUTER_ABI,
+        functionName: 'getAmountsOut',
+        args: [probeAmount, path],
+      })) as bigint[];
+      return amounts[amounts.length - 1] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   return {
     async getPrice(tokenIn: string, tokenOut: string): Promise<bigint> {
-      let amounts: unknown;
-      try {
-        amounts = await publicClient.readContract({
-          address: routerAddress,
-          abi: SWAPPI_ROUTER_ABI,
-          functionName: 'getAmountsOut',
-          args: [
-            1_000_000_000_000_000_000n,
-            [tokenIn as `0x${string}`, tokenOut as `0x${string}`],
-          ],
-        });
-      } catch (err) {
-        // Contract reverts (e.g. pair does not exist, insufficient liquidity) and
-        // transient RPC errors both land here.  Re-throw so the Executor's catch
-        // block can increment the retry counter and update last_error in the DB —
-        // silently returning 0 would leave the job looping forever with no UI
-        // feedback.
-        const reason = err instanceof Error ? err.message : String(err);
+      // Probe with exactly one whole unit of tokenIn (10^decimals).
+      // Decimals are fetched from the on-chain ERC-20 contract and cached.
+      const decimalsIn = await getDecimals(tokenIn);
+      const decimalsOut = await getDecimals(tokenOut);
+      const probeAmount = 10n ** BigInt(decimalsIn);
+
+      const tIn = tokenIn as `0x${string}`;
+      const tOut = tokenOut as `0x${string}`;
+
+      // Try 1: direct path [tokenIn, tokenOut]
+      let rawAmountOut = await tryPath(probeAmount, [tIn, tOut]);
+
+      // Try 2: route through wCFX [tokenIn, wCFX, tokenOut]
+      // Many tokens don't have a direct pool but are both paired with wCFX.
+      if (rawAmountOut === null && tIn.toLowerCase() !== wCFX.toLowerCase() && tOut.toLowerCase() !== wCFX.toLowerCase()) {
+        rawAmountOut = await tryPath(probeAmount, [tIn, wCFX, tOut]);
+        if (rawAmountOut !== null) {
+          logger.info(
+            { tokenIn, tokenOut },
+            '[SwappiPriceSource] direct pair unavailable, routed via wCFX'
+          );
+        }
+      }
+
+      if (rawAmountOut === null) {
+        // Both paths failed — no liquidity available on Swappi for this pair.
         logger.warn(
-          { tokenIn, tokenOut, reason },
-          '[SwappiPriceSource] getPrice failed — re-throwing for executor retry handling'
+          { tokenIn, tokenOut, decimalsIn, probeAmount: probeAmount.toString() },
+          '[SwappiPriceSource] getPrice failed on all paths (direct + wCFX) — re-throwing'
         );
         throw new Error(
-          `getAmountsOut reverted for pair ${tokenIn}→${tokenOut}: ${reason}`
+          `getAmountsOut reverted for pair ${tokenIn}→${tokenOut}: no liquidity (tried direct + wCFX route)`
         );
       }
-      return (amounts as bigint[])[1] ?? 0n;
+
+      // Normalise the raw amountOut to a 1e18-scaled price so that the
+      // PriceChecker comparison with targetPrice (always stored at 1e18
+      // scale) is always apples-to-apples.
+      //
+      // rawAmountOut is in tokenOut's raw units (10^decimalsOut scale).
+      // We probed with 1 whole tokenIn, so the human-readable price is:
+      //   price = rawAmountOut / 10^decimalsOut   (tokenOut per tokenIn)
+      // To express in 1e18 scale:
+      //   normalised = rawAmountOut * 10^(18 - decimalsOut)
+      if (rawAmountOut === 0n) return 0n;
+      const scaleFactor = 10n ** BigInt(18 - decimalsOut);
+      const normalised = rawAmountOut * scaleFactor;
+      logger.debug(
+        { tokenIn, tokenOut, decimalsIn, decimalsOut, rawAmountOut: rawAmountOut.toString(), normalised: normalised.toString() },
+        '[SwappiPriceSource] price normalised'
+      );
+      return normalised;
     },
   };
 }
@@ -184,13 +291,19 @@ async function main() {
     transport: http(config.rpcUrl),
   });
   const routerAddress = SWAPPI_ROUTER[config.network];
+
+  // Fetch and cache token decimals from on-chain ERC-20 contracts.
+  // No static registry needed — works automatically for every token.
+  const getDecimals = createDecimalsResolver(publicClient);
   const swappiPriceSource = createSwappiPriceSource(
     publicClient,
-    routerAddress
+    routerAddress,
+    getDecimals,
+    WCFX_ADDRESS[config.network]
   );
 
   const safetyGuard = new SafetyGuard({}, logger);
-  const priceChecker = new PriceChecker(swappiPriceSource, new Map(), logger);
+  const priceChecker = new PriceChecker(swappiPriceSource, new Map(), logger, getDecimals);
   const retryQueue = new RetryQueue({}, logger);
   const _auditLogger = new AuditLogger();
 

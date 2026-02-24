@@ -131,7 +131,7 @@ function TokenChip({ meta, size = 'sm' }: { meta?: TokenMeta; size?: 'xs' | 'sm'
       ) : (
         <span className={`${dim} rounded-full bg-slate-700 ring-1 ring-slate-600/50 flex-shrink-0`} />
       )}
-      <span className="font-semibold text-slate-200">
+      <span className="font-semibold text-slate-200 truncate max-w-[80px]" title={meta?.symbol ?? '?'}>
         {meta?.symbol ?? '?'}
       </span>
     </span>
@@ -312,13 +312,18 @@ function JobRow({
       {/* Status */}
       <td className="px-4 py-4 whitespace-nowrap first:rounded-l-xl">
         <StatusBadge status={job.status} />
+        {!isTerminal && job.lastError && (
+          <p className="mt-1 text-[10px] text-amber-400/80 truncate max-w-[12rem]" title={job.lastError}>
+            ⚠ {job.lastError}
+          </p>
+        )}
       </td>
       {/* Type */}
       <td className="px-4 py-4 whitespace-nowrap text-xs font-semibold text-slate-300 uppercase tracking-wider">
         {job.type === 'limit_order' ? 'Limit' : 'DCA'}
       </td>
       {/* Pair — icon chips */}
-      <td className="px-4 py-4 whitespace-nowrap">
+      <td className="px-4 py-4 whitespace-nowrap min-w-[140px]">
         <span className="flex items-center gap-2 text-sm bg-slate-900/50 px-2.5 py-1.5 rounded-lg border border-slate-700/50 w-fit">
           <TokenChip meta={metaIn} />
           <span className="text-slate-500 font-medium">→</span>
@@ -326,11 +331,11 @@ function JobRow({
         </span>
       </td>
       {/* Amount — icon + number */}
-      <td className="px-4 py-4 whitespace-nowrap">
-        <span className="inline-flex items-center gap-1.5 font-medium text-slate-200 bg-slate-900/50 rounded-lg px-2.5 py-1 text-sm border border-slate-700/50">
+      <td className="px-4 py-4 whitespace-nowrap min-w-[120px]">
+        <span className="inline-flex items-center gap-1.5 font-medium text-slate-200 bg-slate-900/50 rounded-lg px-2.5 py-1 text-sm border border-slate-700/50 w-fit">
           <TokenChip meta={metaIn} size="xs" />
-          <span>{amtIn}</span>
-          <span className="text-xs text-slate-500">{symIn}</span>
+          <span className="truncate max-w-[80px]" title={amtIn}>{amtIn}</span>
+          <span className="text-xs text-slate-500 truncate max-w-[50px]">{symIn}</span>
         </span>
       </td>
       {/* Target / Progress */}

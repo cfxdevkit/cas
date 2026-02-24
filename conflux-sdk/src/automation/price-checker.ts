@@ -23,21 +23,38 @@ export interface PriceCheckResult {
 }
 
 /**
+ * Callback that resolves a token address to its ERC-20 decimal count.
+ * Implementations should cache the result for performance.
+ */
+export type DecimalsResolver = (token: string) => Promise<number>;
+
+/** Default resolver — assumes 18 decimals for every token. */
+const defaultDecimalsResolver: DecimalsResolver = async () => 18;
+
+/**
  * PriceChecker – queries a price source and evaluates whether a job's
  * trigger condition is currently met.
  */
 export class PriceChecker {
   private source: PriceSource;
   private tokenPricesUsd: Map<string, number>;
+  /**
+   * Resolves a token's decimal count.  Called lazily when _estimateUsd needs
+   * to convert raw wei amounts into human-readable values.  The resolver may
+   * query the chain, a static map, or simply return 18.
+   */
+  private getDecimals: DecimalsResolver;
   private readonly log: AutomationLogger;
 
   constructor(
     source: PriceSource,
     tokenPricesUsd: Map<string, number> = new Map(),
-    logger: AutomationLogger = noopLogger
+    logger: AutomationLogger = noopLogger,
+    getDecimals: DecimalsResolver = defaultDecimalsResolver
   ) {
     this.source = source;
     this.tokenPricesUsd = tokenPricesUsd;
+    this.getDecimals = getDecimals;
     this.log = logger;
   }
 
@@ -58,7 +75,7 @@ export class PriceChecker {
       conditionMet = currentPrice <= targetPrice;
     }
 
-    const swapUsd = this._estimateUsd(params.tokenIn, params.amountIn);
+    const swapUsd = await this._estimateUsd(params.tokenIn, params.amountIn);
 
     this.log.debug(
       {
@@ -82,7 +99,7 @@ export class PriceChecker {
       params.tokenIn,
       params.tokenOut
     );
-    const swapUsd = this._estimateUsd(params.tokenIn, params.amountPerSwap);
+    const swapUsd = await this._estimateUsd(params.tokenIn, params.amountPerSwap);
 
     this.log.debug(
       {
@@ -101,10 +118,12 @@ export class PriceChecker {
     this.tokenPricesUsd.set(token.toLowerCase(), usdPrice);
   }
 
-  private _estimateUsd(token: string, amountWei: string): number {
+  private async _estimateUsd(token: string, amountWei: string): Promise<number> {
     const usdPerToken = this.tokenPricesUsd.get(token.toLowerCase()) ?? 0;
-    // Assumes 18 decimals — fine for a rough USD safety cap estimate
-    const amount = Number(BigInt(amountWei)) / 1e18;
+    // Resolve the token's actual decimal count (on-chain or cached).
+    const decimals = await this.getDecimals(token);
+    const divisor = 10 ** decimals;
+    const amount = Number(BigInt(amountWei)) / divisor;
     return amount * usdPerToken;
   }
 }

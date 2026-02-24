@@ -69,7 +69,9 @@ function makeJobStore() {
     markFailed: vi.fn().mockResolvedValue(undefined),
     incrementRetry: vi.fn().mockResolvedValue(undefined),
     markExpired: vi.fn().mockResolvedValue(undefined),
+    markExpired: vi.fn(),
     markCancelled: vi.fn().mockResolvedValue(undefined),
+    updateLastError: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -212,37 +214,39 @@ describe('Executor.processTick', () => {
     expect(store.markCancelled).toHaveBeenCalledWith(job.id);
   });
 
-  // ── Transient errors — silent return, no permanent failure ────────────────
+  // ── Transient errors — increment retries, update last error, don't perm-fail until max ──
 
-  it('returns silently on PriceConditionNotMet', async () => {
+  it('increments retries and updates last error on PriceConditionNotMet', async () => {
     const keeper = makeKeeperClient();
     keeper.executeLimitOrder.mockRejectedValue(new Error('PriceConditionNotMet'));
     const { executor, store } = makeExecutor({ keeper });
     const job = makeLimitOrderJob();
     await executor.processTick(job);
     expect(store.markFailed).not.toHaveBeenCalled();
-    expect(store.incrementRetry).not.toHaveBeenCalled();
-    expect(store.markCancelled).not.toHaveBeenCalled();
+    expect(store.incrementRetry).toHaveBeenCalledWith(job.id);
+    expect(store.updateLastError).toHaveBeenCalled();
   });
 
-  it('returns silently on DCAIntervalNotReached', async () => {
+  it('increments retries and updates last error on DCAIntervalNotReached', async () => {
     const keeper = makeKeeperClient();
     keeper.executeDCATick.mockRejectedValue(new Error('DCAIntervalNotReached'));
     const { executor, store } = makeExecutor({ keeper });
     const job = makeDCAJob();
     await executor.processTick(job);
     expect(store.markFailed).not.toHaveBeenCalled();
-    expect(store.incrementRetry).not.toHaveBeenCalled();
+    expect(store.incrementRetry).toHaveBeenCalledWith(job.id);
+    expect(store.updateLastError).toHaveBeenCalled();
   });
 
-  it('returns silently on Slippage exceeded', async () => {
+  it('increments retries and updates last error on Slippage exceeded', async () => {
     const keeper = makeKeeperClient();
     keeper.executeLimitOrder.mockRejectedValue(new Error('Slippage exceeded'));
     const { executor, store } = makeExecutor({ keeper });
     const job = makeLimitOrderJob();
     await executor.processTick(job);
     expect(store.markFailed).not.toHaveBeenCalled();
-    expect(store.incrementRetry).not.toHaveBeenCalled();
+    expect(store.incrementRetry).toHaveBeenCalledWith(job.id);
+    expect(store.updateLastError).toHaveBeenCalled();
   });
 
   // ── Condition not met (off-chain price check) ─────────────────────────────

@@ -322,4 +322,11 @@ export class DbJobStore implements JobStore {
 
     logger.info({ jobId }, '[DbJobStore] markCancelled');
   }
+
+  async updateLastError(jobId: string, error: string): Promise<void> {
+    await this.db
+      .update(jobs)
+      .set({ lastError: error, updatedAt: Date.now() })
+      .where(eq(jobs.id, jobId));
+  }
 }

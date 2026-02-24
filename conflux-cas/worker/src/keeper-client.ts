@@ -248,13 +248,22 @@ export class KeeperClientImpl implements IKeeperClient {
 
     // Simulate first — throws with a decoded revert reason if it would fail,
     // saving gas and giving us actionable error messages.
-    await this.publicClient.simulateContract({
-      address: this.contractAddress,
-      abi: AUTOMATION_MANAGER_ABI,
-      functionName: 'executeLimitOrder',
-      args: [jobId as `0x${string}`, this.swappiRouter, swapCalldata],
-      account: this.account.address,
-    });
+    try {
+      await this.publicClient.simulateContract({
+        address: this.contractAddress,
+        abi: AUTOMATION_MANAGER_ABI,
+        functionName: 'executeLimitOrder',
+        args: [jobId as `0x${string}`, this.swappiRouter, swapCalldata],
+        account: this.account.address,
+      });
+    } catch (simErr: unknown) {
+      const msg = simErr instanceof Error ? simErr.message : String(simErr);
+      logger.error(
+        { jobId, error: msg.slice(0, 500) },
+        '[KeeperClient] executeLimitOrder simulation reverted'
+      );
+      throw simErr;
+    }
 
     const hash: Hash = await this.walletClient.writeContract({
       address: this.contractAddress,
@@ -324,13 +333,22 @@ export class KeeperClientImpl implements IKeeperClient {
     );
 
     // Simulate first — throws with a decoded revert reason if it would fail.
-    await this.publicClient.simulateContract({
-      address: this.contractAddress,
-      abi: AUTOMATION_MANAGER_ABI,
-      functionName: 'executeDCATick',
-      args: [jobId as `0x${string}`, this.swappiRouter, swapCalldata],
-      account: this.account.address,
-    });
+    try {
+      await this.publicClient.simulateContract({
+        address: this.contractAddress,
+        abi: AUTOMATION_MANAGER_ABI,
+        functionName: 'executeDCATick',
+        args: [jobId as `0x${string}`, this.swappiRouter, swapCalldata],
+        account: this.account.address,
+      });
+    } catch (simErr: unknown) {
+      const msg = simErr instanceof Error ? simErr.message : String(simErr);
+      logger.error(
+        { jobId, error: msg.slice(0, 500) },
+        '[KeeperClient] executeDCATick simulation reverted'
+      );
+      throw simErr;
+    }
 
     const hash: Hash = await this.walletClient.writeContract({
       address: this.contractAddress,
