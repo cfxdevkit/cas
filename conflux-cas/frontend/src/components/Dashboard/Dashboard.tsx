@@ -1,7 +1,7 @@
 'use client';
 
 import type { DCAJob, Job, LimitOrderJob } from '@conflux-cas/shared';
-import { ClipboardList } from 'lucide-react';
+import { ClipboardList, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatUnits } from 'viem';
@@ -391,9 +391,17 @@ function JobRow({
               type="button"
               onClick={() => void handleCancel()}
               disabled={cancelling}
-              className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-40"
+              className="inline-flex items-center gap-1 text-red-400 hover:text-red-300 transition-colors disabled:opacity-60"
+              title={cancelling ? 'Cancelling…' : 'Cancel strategy'}
             >
-              {cancelling ? '…' : 'Cancel'}
+              {cancelling ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Cancelling…</span>
+                </>
+              ) : (
+                'Cancel'
+              )}
             </button>
           )}
         </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import type { DCAJob, Job, LimitOrderJob } from '@conflux-cas/shared';
 import {
   ArrowDown,
   CheckCircle2,
@@ -528,18 +529,60 @@ export function StrategyBuilder({
           args: [address, AUTOMATION_MANAGER_ADDRESS],
         })) as bigint;
 
-        if (currentAllowance < requiredAllowance) {
-          const approveAmount = unlimitedApproval
-            ? MAX_UINT256
-            : requiredAllowance;
+        // ── Sum up allowance already committed by existing active strategies ──
+        // Each active job for the same tokenIn "consumes" part of the approved
+        // allowance when it executes.  We must ensure the on-chain allowance
+        // covers ALL outstanding strategies, not just this new one.
+        const TERMINAL_STATUSES = new Set(['executed', 'cancelled', 'failed']);
+        let existingCommitted = 0n;
+        try {
+          const jobsRes = await fetch('/api/jobs', {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (jobsRes.ok) {
+            const existingJobs = (await jobsRes.json()) as Job[];
+            for (const j of existingJobs) {
+              if (TERMINAL_STATUSES.has(j.status)) continue;
+              const jTokenIn =
+                j.type === 'limit_order'
+                  ? (j as LimitOrderJob).params.tokenIn
+                  : (j as DCAJob).params.tokenIn;
+              if (jTokenIn.toLowerCase() !== resolvedTokenIn.toLowerCase())
+                continue;
+              if (j.type === 'limit_order') {
+                existingCommitted += BigInt(
+                  (j as LimitOrderJob).params.amountIn
+                );
+              } else {
+                const dca = j as DCAJob;
+                const remaining = Math.max(
+                  0,
+                  dca.params.totalSwaps - dca.params.swapsCompleted
+                );
+                existingCommitted +=
+                  BigInt(dca.params.amountPerSwap) * BigInt(remaining);
+              }
+            }
+          }
+        } catch {
+          // Non-fatal — fall back to checking only the new strategy's amount.
+        }
+
+        // Total allowance this account needs: new strategy + all active ones.
+        const totalRequired = existingCommitted + requiredAllowance;
+
+        if (currentAllowance < totalRequired) {
+          const approveAmount = unlimitedApproval ? MAX_UINT256 : totalRequired;
           const decimals = tokenInDecimals;
           const sym = tokenInIsNative ? 'wCFX' : (tokenInInfo?.symbol ?? '');
-          const totalFormatted = formatUnits(requiredAllowance, decimals);
+          const totalFormatted = formatUnits(totalRequired, decimals);
           const approveLabel = unlimitedApproval
             ? 'unlimited'
-            : kind === 'dca'
-              ? `${totalFormatted} ${sym} (${amountPerSwap} × ${totalSwaps} orders)`
-              : `${totalFormatted} ${sym}`;
+            : existingCommitted > 0n
+              ? `${totalFormatted} ${sym} (this + existing strategies)`
+              : kind === 'dca'
+                ? `${totalFormatted} ${sym} (${amountPerSwap} × ${totalSwaps} orders)`
+                : `${totalFormatted} ${sym}`;
           setStep('approve', 'active', `Approve ${approveLabel}…`);
           const approveGas = await publicClient.estimateContractGas({
             address: resolvedTokenIn as `0x${string}`,
