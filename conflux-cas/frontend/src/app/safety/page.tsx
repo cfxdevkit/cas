@@ -4,7 +4,6 @@ import type { Job } from '@conflux-cas/shared';
 import {
   Activity,
   AlertTriangle,
-  CheckCircle2,
   Clock,
   Database,
   Loader2,
@@ -78,18 +77,20 @@ function timeAgo(iso: string | Date | null): string {
 
 type HealthLevel = 'ok' | 'warning' | 'emergency';
 
-function computeHealth(s: SystemStatus): HealthLevel {
+// visibleFailedCount: how many non-dismissed failed jobs remain visible.
+// This lets the health level resolve to 'ok' once all failures are dismissed.
+function computeHealth(
+  s: SystemStatus,
+  visibleFailedCount: number
+): HealthLevel {
   if (s.paused) return 'emergency';
   if (!s.rpc.ok) return 'emergency';
   if (!s.database.ok) return 'emergency';
   if (s.worker.status === 'unknown') return 'emergency';
-  if (
-    s.database.jobCount > 0 &&
-    s.database.failedJobs / s.database.jobCount > 0.3
-  )
+  if (s.database.jobCount > 0 && visibleFailedCount / s.database.jobCount > 0.3)
     return 'emergency';
   if (s.worker.status === 'idle') return 'warning';
-  if (s.database.failedJobs > 0) return 'warning';
+  if (visibleFailedCount > 0) return 'warning';
   if (
     !s.contracts.automationManager.ok ||
     !s.contracts.priceAdapter.ok ||
@@ -97,6 +98,25 @@ function computeHealth(s: SystemStatus): HealthLevel {
   )
     return 'warning';
   return 'ok';
+}
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+
+const LS_KEY = 'cas:safety:dismissed';
+
+function loadDismissed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? new Set(JSON.parse(raw) as string[]) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissed(ids: Set<string>): void {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify([...ids]));
+  } catch {}
 }
 
 // ─── Small components ─────────────────────────────────────────────────────────
@@ -176,9 +196,56 @@ export default function SafetyPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [pausing, setPausing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  useEffect(() => setMounted(true), []);
+  // Load persisted dismissals once on mount (client-only)
+  useEffect(() => {
+    setMounted(true);
+    setDismissedIds(loadDismissed());
+  }, []);
+
+  // When fresh job data arrives, prune dismissed IDs whose jobs are now resolved
+  // (executed / cancelled, or active without lastError) — keeps the archive tidy.
+  useEffect(() => {
+    if (jobs.length === 0) return;
+    setDismissedIds((prev) => {
+      const problemIds = new Set(
+        jobs
+          .filter(
+            (j) =>
+              j.status === 'failed' ||
+              ((j.status === 'active' || j.status === 'pending') && j.lastError)
+          )
+          .map((j) => j.id)
+      );
+      const pruned = new Set([...prev].filter((id) => problemIds.has(id)));
+      if (pruned.size !== prev.size) saveDismissed(pruned);
+      return pruned;
+    });
+  }, [jobs]);
+
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function dismissJob(id: string) {
+    setDismissedIds((prev) => {
+      const next = new Set([...prev, id]);
+      saveDismissed(next);
+      return next;
+    });
+  }
+
+  function restoreAll() {
+    saveDismissed(new Set());
+    setDismissedIds(new Set());
+  }
 
   const fetchData = useCallback(async () => {
     setFetchError(null);
@@ -186,7 +253,7 @@ export default function SafetyPage() {
       const [statusRes, jobsRes] = await Promise.all([
         fetch('/api/system/status'),
         token
-          ? fetch('/api/jobs', {
+          ? fetch('/api/admin/jobs', {
               headers: { Authorization: `Bearer ${token}` },
             })
           : Promise.resolve(null),
@@ -268,13 +335,23 @@ export default function SafetyPage() {
     );
   }
 
-  const health = computeHealth(sysStatus);
-  const failedJobs = jobs.filter((j) => j.status === 'failed');
+  const failedJobs = jobs
+    .filter((j) => j.status === 'failed')
+    .filter((j) => !dismissedIds.has(j.id));
   const activeJobs = jobs.filter(
     (j) => j.status === 'active' || j.status === 'pending'
   );
   // Active / pending jobs that have a lastError (transient but worth seeing)
-  const jobsWithErrors = activeJobs.filter((j) => j.lastError);
+  const jobsWithErrors = activeJobs
+    .filter((j) => j.lastError)
+    .filter((j) => !dismissedIds.has(j.id));
+  // Dismissed count shown in banner so the admin knows they exist
+  const dismissedCount = dismissedIds.size;
+  // Health computed AFTER filtering so dismissed jobs don't keep warning lit
+  const health = computeHealth(
+    sysStatus,
+    failedJobs.length + jobsWithErrors.length
+  );
 
   async function handleTogglePause() {
     if (!token) return;
@@ -383,16 +460,32 @@ export default function SafetyPage() {
                 {sysStatus.worker.status === 'idle' && (
                   <li>• Worker has not executed in the last 10 minutes</li>
                 )}
-                {failedJobs.length > 0 && (
+                {(failedJobs.length > 0 ||
+                  sysStatus.database.failedJobs > 0) && (
                   <li>
-                    • {failedJobs.length} job(s) in failed state — see details
-                    below
+                    •{' '}
+                    {failedJobs.length > 0
+                      ? failedJobs.length
+                      : sysStatus.database.failedJobs}{' '}
+                    job(s) in failed state
+                    {dismissedCount > 0 && (
+                      <span className="text-amber-500/60">
+                        {' '}
+                        ({dismissedCount} dismissed)
+                      </span>
+                    )}
+                    {' — '}
+                    <span className="underline decoration-dotted">
+                      see below
+                    </span>
                   </li>
                 )}
                 {jobsWithErrors.length > 0 && (
                   <li>
-                    • {jobsWithErrors.length} active job(s) have encountered
-                    errors
+                    • {jobsWithErrors.length} active job(s) with recent errors —{' '}
+                    <span className="underline decoration-dotted">
+                      see below
+                    </span>
                   </li>
                 )}
                 {(!sysStatus.contracts.automationManager.ok ||
@@ -404,62 +497,6 @@ export default function SafetyPage() {
               </ul>
             </div>
           </div>
-
-          {/* Inline error details for failed jobs */}
-          {failedJobs.length > 0 && (
-            <div className="ml-11 space-y-2">
-              {failedJobs.map((j) => (
-                <div
-                  key={j.id}
-                  className="rounded-lg border border-red-800/60 bg-red-950/30 px-3 py-2.5 flex flex-col gap-1"
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
-                    <span className="font-mono text-xs text-slate-400">
-                      {j.id.slice(0, 20)}…
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase bg-slate-700 rounded px-1.5 py-0.5 text-slate-300">
-                      {j.type === 'limit_order' ? 'Limit' : 'DCA'}
-                    </span>
-                    <span className="text-[10px] text-slate-500 ml-auto">
-                      {j.retries}/{j.maxRetries} retries
-                    </span>
-                  </div>
-                  <p className="text-xs text-red-400/90 ml-5 leading-relaxed break-words">
-                    {j.lastError ?? 'No error message recorded'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Inline error details for active jobs with recent errors */}
-          {jobsWithErrors.length > 0 && (
-            <div className="ml-11 space-y-2">
-              {jobsWithErrors.map((j) => (
-                <div
-                  key={j.id}
-                  className="rounded-lg border border-amber-800/50 bg-amber-950/20 px-3 py-2.5 flex flex-col gap-1"
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                    <span className="font-mono text-xs text-slate-400">
-                      {j.id.slice(0, 20)}…
-                    </span>
-                    <span className="text-[10px] font-semibold uppercase bg-slate-700 rounded px-1.5 py-0.5 text-slate-300">
-                      {j.type === 'limit_order' ? 'Limit' : 'DCA'}
-                    </span>
-                    <span className="text-xs capitalize text-slate-500 ml-auto">
-                      {j.status}
-                    </span>
-                  </div>
-                  <p className="text-xs text-amber-400/80 ml-5 leading-relaxed break-words">
-                    {j.lastError ?? 'No error message recorded'}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       )}
 
@@ -605,90 +642,170 @@ export default function SafetyPage() {
         </div>
       </section>
 
-      {/* ── Failed jobs with errors ─────────────────────────────────────────── */}
-      {failedJobs.length > 0 && (
+      {/* ── Failed jobs ────────────────────────────────────────────────────── */}
+      {(failedJobs.length > 0 || sysStatus.database.failedJobs > 0) && (
         <section>
-          <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            Your Failed Jobs{' '}
-            <span className="text-red-400 normal-case">
-              ({failedJobs.length})
-            </span>
-          </h3>
-          <div className="space-y-2">
-            {failedJobs.map((j) => (
-              <div
-                key={j.id}
-                className="rounded-xl border border-red-800/50 bg-red-950/20 px-4 py-3 flex flex-col gap-1"
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider">
+              Failed Jobs{' '}
+              <span className="text-red-400 normal-case">
+                ({sysStatus.database.failedJobs})
+              </span>
+            </h3>
+            {dismissedIds.size > 0 && (
+              <button
+                type="button"
+                onClick={restoreAll}
+                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
               >
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <XCircle className="h-4 w-4 text-red-400 shrink-0" />
-                    <span className="font-mono text-xs text-slate-400">
-                      {j.id.slice(0, 24)}…
+                Restore {dismissedIds.size} dismissed
+              </button>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {failedJobs.map((j) => {
+              const isExpanded = expandedIds.has(j.id);
+              return (
+                <div
+                  key={j.id}
+                  className="rounded-lg border border-red-800/40 bg-red-950/20 overflow-hidden"
+                >
+                  {/* Compact header row — always visible */}
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(j.id)}
+                      className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                    >
+                      <XCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                      <span className="font-mono text-xs text-slate-400 truncate">
+                        {j.id.slice(0, 26)}…
+                      </span>
+                      <span className="text-[10px] font-semibold uppercase bg-slate-700 rounded px-1.5 py-0.5 text-slate-300 shrink-0">
+                        {j.type === 'limit_order' ? 'Limit' : 'DCA'}
+                      </span>
+                    </button>
+                    <span className="text-[10px] text-slate-500 shrink-0">
+                      {j.retries}/{j.maxRetries}
                     </span>
-                    <span className="text-xs font-semibold text-slate-300 uppercase bg-slate-700 rounded px-1.5 py-0.5">
-                      {j.type === 'limit_order' ? 'Limit' : 'DCA'}
-                    </span>
+                    {j.lastError && (
+                      <span className="text-xs text-red-400/70 truncate max-w-[180px] shrink-0 hidden sm:block">
+                        {j.lastError.slice(0, 60)}
+                        {j.lastError.length > 60 ? '…' : ''}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(j.id)}
+                      className="text-slate-600 hover:text-slate-300 shrink-0 text-xs px-1 transition-colors"
+                      title={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      {isExpanded ? '▲' : '▼'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissJob(j.id)}
+                      className="text-slate-600 hover:text-red-400 shrink-0 transition-colors"
+                      title="Dismiss"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  <span className="text-xs text-slate-500">
-                    {j.retries}/{j.maxRetries} retries
-                  </span>
+                  {/* Expanded error detail */}
+                  {isExpanded && (
+                    <div className="border-t border-red-800/30 px-3 py-2 bg-red-950/30">
+                      <p className="text-xs text-red-400/90 leading-relaxed break-all max-h-40 overflow-y-auto">
+                        {j.lastError ?? 'No error message recorded'}
+                      </p>
+                      <div className="flex gap-3 mt-2 text-[10px] text-slate-500">
+                        <span>Owner: {j.owner.slice(0, 10)}…</span>
+                        <span>Updated: {timeAgo(new Date(j.updatedAt))}</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {j.lastError && (
-                  <p className="text-xs text-red-400/80 ml-6 mt-0.5 leading-relaxed">
-                    {j.lastError}
-                  </p>
-                )}
-              </div>
-            ))}
+              );
+            })}
+            {dismissedIds.size > 0 && (
+              <p className="text-xs text-slate-600 pl-1">
+                {dismissedIds.size} job(s) dismissed from view
+              </p>
+            )}
           </div>
         </section>
       )}
 
-      {/* ── Active jobs with warnings ───────────────────────────────────────── */}
-      {activeJobs.length > 0 && (
+      {/* ── Active jobs with errors ─────────────────────────────────────────── */}
+      {jobsWithErrors.length > 0 && (
         <section>
           <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-            Your Active Jobs{' '}
-            <span className="text-emerald-400 normal-case">
-              ({activeJobs.length})
+            Active Jobs with Errors{' '}
+            <span className="text-amber-400 normal-case">
+              ({jobsWithErrors.length})
             </span>
           </h3>
           <div className="space-y-1.5">
-            {activeJobs.slice(0, 10).map((j) => (
-              <div
-                key={j.id}
-                className="rounded-lg border border-slate-700/40 bg-slate-800/30 px-4 py-2.5 flex items-center justify-between gap-2"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  <span className="font-mono text-xs text-slate-400 truncate">
-                    {j.id.slice(0, 24)}…
-                  </span>
-                  <span className="text-xs font-semibold text-slate-400 uppercase bg-slate-700 rounded px-1.5 py-0.5 shrink-0">
-                    {j.type === 'limit_order' ? 'Limit' : 'DCA'}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {j.lastError && (
-                    <span
-                      className="text-[10px] text-amber-400/80 max-w-[200px] truncate"
-                      title={j.lastError}
+            {jobsWithErrors.map((j) => {
+              const isExpanded = expandedIds.has(j.id);
+              return (
+                <div
+                  key={j.id}
+                  className="rounded-lg border border-amber-800/30 bg-amber-950/10 overflow-hidden"
+                >
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(j.id)}
+                      className="flex items-center gap-2 min-w-0 flex-1 text-left"
                     >
-                      ⚠ {j.lastError}
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                      <span className="font-mono text-xs text-slate-400 truncate">
+                        {j.id.slice(0, 26)}…
+                      </span>
+                      <span className="text-[10px] font-semibold uppercase bg-slate-700 rounded px-1.5 py-0.5 text-slate-300 shrink-0">
+                        {j.type === 'limit_order' ? 'Limit' : 'DCA'}
+                      </span>
+                    </button>
+                    <span className="text-[10px] text-slate-500 shrink-0">
+                      {j.retries}/{j.maxRetries}
                     </span>
+                    {j.lastError && (
+                      <span className="text-xs text-amber-400/70 truncate max-w-[180px] shrink-0 hidden sm:block">
+                        {j.lastError.slice(0, 60)}
+                        {j.lastError.length > 60 ? '…' : ''}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(j.id)}
+                      className="text-slate-600 hover:text-slate-300 shrink-0 text-xs px-1 transition-colors"
+                      title={isExpanded ? 'Collapse' : 'Expand'}
+                    >
+                      {isExpanded ? '▲' : '▼'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => dismissJob(j.id)}
+                      className="text-slate-600 hover:text-amber-400 shrink-0 transition-colors"
+                      title="Dismiss"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {isExpanded && (
+                    <div className="border-t border-amber-800/20 px-3 py-2 bg-amber-950/20">
+                      <p className="text-xs text-amber-400/80 leading-relaxed break-all max-h-40 overflow-y-auto">
+                        {j.lastError}
+                      </p>
+                      <div className="flex gap-3 mt-2 text-[10px] text-slate-500">
+                        <span>Owner: {j.owner.slice(0, 10)}…</span>
+                        <span>Updated: {timeAgo(new Date(j.updatedAt))}</span>
+                      </div>
+                    </div>
                   )}
-                  <span className="text-xs text-slate-500">
-                    {j.retries}/{j.maxRetries}
-                  </span>
                 </div>
-              </div>
-            ))}
-            {activeJobs.length > 10 && (
-              <p className="text-xs text-slate-500 pl-1">
-                … and {activeJobs.length - 10} more
-              </p>
-            )}
+              );
+            })}
           </div>
         </section>
       )}

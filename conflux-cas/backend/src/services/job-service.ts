@@ -70,6 +70,15 @@ export class JobService {
     return rows.map((r) => this._rowToJob(r));
   }
 
+  /** Return all jobs across all owners, optionally filtered by status. Admin use only. */
+  async getAllJobs(status?: string): Promise<Job[]> {
+    const rows = await db.query.jobs.findMany({
+      where: status ? eq(jobs.status, status as Job['status']) : undefined,
+      orderBy: (j, { desc }) => [desc(j.updatedAt)],
+    });
+    return rows.map((r) => this._rowToJob(r));
+  }
+
   async cancelJob(
     id: string,
     owner: string

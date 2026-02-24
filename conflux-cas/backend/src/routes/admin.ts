@@ -6,6 +6,7 @@ import {
 } from 'express';
 import { requireAdmin, requireAuth } from '../middleware/auth.js';
 import { adminService } from '../services/admin-service.js';
+import { jobService } from '../services/job-service.js';
 
 const router: RouterType = Router();
 
@@ -24,6 +25,16 @@ router.post('/pause', requireAdmin, async (_req: Request, res: Response) => {
 router.post('/resume', requireAdmin, async (_req: Request, res: Response) => {
   await adminService.resume();
   res.json({ paused: false });
+});
+
+/**
+ * GET /admin/jobs — all jobs across all owners (admin-only).
+ * Optional query param: ?status=failed|active|pending|executed|cancelled
+ */
+router.get('/jobs', requireAdmin, async (req: Request, res: Response) => {
+  const { status } = req.query as { status?: string };
+  const allJobs = await jobService.getAllJobs(status);
+  res.json({ jobs: allJobs });
 });
 
 export default router;
